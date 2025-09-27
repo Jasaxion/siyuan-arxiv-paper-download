@@ -7,12 +7,14 @@
 * 将作者、参考文献、致谢等信息压缩为代码块展示，并优化插入对话框体验。
 * 修复 HTML 解析时相对图片地址导致无法显示的问题。
 * 解析全文内容时使用块级方式插入 Markdown，避免文档渲染异常。
+* 将 HTML 表格转换为 Markdown 表格，避免在思源中出现逐行换行的情况。
 * 新增“去掉参考文献”选项，并为作者与参考文献部分增加可折叠标题。
 * Added an optional "Parse full text" toggle to convert arXiv HTML renderings into Markdown inside SiYuan.
 * Added a LaTeX source archive fallback when HTML rendering is unavailable.
 * Compressed author, reference, and acknowledgement sections into compact code blocks and refined the insert dialog UX.
 * Fixed HTML parsing so figure/image URLs remain absolute and render correctly in SiYuan.
 * Insert parsed Markdown as proper block DOM nodes to preserve formatting.
+* Converted HTML tables into Markdown tables so data stays readable in SiYuan.
 * Added an "Omit references" toggle and heading wrappers for the author and references sections.
 
 ## v0.1.0 2025-09-27

@@ -1,6 +1,7 @@
 import {Dialog, Plugin, Protyle, showMessage, getFrontend} from "siyuan";
 import type {Lute} from "siyuan";
 import TurndownService from "turndown";
+import {gfm as turndownPluginGfm} from "turndown-plugin-gfm";
 import {gunzipSync} from "fflate";
 import untar from "js-untar";
 import "./index.scss";
@@ -512,6 +513,7 @@ export default class ArxivPaperPlugin extends Plugin {
             codeBlockStyle: "fenced",
             hr: "---",
         });
+        turndown.use(turndownPluginGfm);
 
         let markdown = turndown.turndown(article.innerHTML);
         markdown = this.cleanupMarkdown(markdown);

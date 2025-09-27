@@ -16,6 +16,7 @@ Having issues? --> https://github.com/Jasaxion/siyuan-arxiv-paper-download/issue
 - Accepts `https://arxiv.org/abs/...`, `https://arxiv.org/pdf/...`, or raw identifiers such as `2509.17567`.
 - Downloads the PDF, stores it in `assets/`, and inserts a Markdown link using the paper title as the filename.
 - Optionally parses the paper into Markdown via arXiv's HTML rendering (with a LaTeX archive fallback) when **Parse full text** is enabled.
+- Converts HTML tables to GitHub-flavored Markdown so numeric data stays readable inside SiYuan.
 - Adds an **Omit references** toggle so you can skip inserting the bibliography when parsing the full text.
 - Skips re-downloading when the titled PDF already exists in `assets/` and simply reuses it.
 - Can be used in conjunction with the additional plugin PaperLess to achieve global management of personal academic paper documents: [PaperLess](https://github.com/Jasaxion/siyuan-paperless)

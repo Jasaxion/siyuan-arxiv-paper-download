@@ -17,6 +17,9 @@ importers:
       turndown:
         specifier: ^7.2.0
         version: 7.2.1
+      turndown-plugin-gfm:
+        specifier: ^1.0.2
+        version: 1.0.2
     devDependencies:
       '@typescript-eslint/eslint-plugin':
         specifier: 8.40.0
@@ -1338,6 +1341,9 @@ packages:
   tslib@2.4.0:
     resolution: {integrity: sha512-d6xOpEDfsi2CZVlPQzGeux8XMwLT9hssAsaPYExaQMuYskwb+x1x7J371tWlbBdWHroy99KnVB6qIkUbs5X3UQ==}
 
+  turndown-plugin-gfm@1.0.2:
+    resolution: {integrity: sha512-vwz9tfvF7XN/jE0dGoBei3FXWuvll78ohzCZQuOb+ZjWrs3a0XhQVomJEb2Qh4VHTPNRO4GPZh0V7VRbiWwkRg==}
+
   turndown@7.2.1:
     resolution: {integrity: sha512-7YiPJw6rLClQL3oUKN3KgMaXeJJ2lAyZItclgKDurqnH61so4k4IH/qwmMva0zpuJc/FhRExBBnk7EbeFANlgQ==}
 
@@ -2593,6 +2599,8 @@ snapshots:
       typescript: 4.8.4
 
   tslib@2.4.0: {}
+
+  turndown-plugin-gfm@1.0.2: {}
 
   turndown@7.2.1:
     dependencies:

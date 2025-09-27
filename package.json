@@ -1,6 +1,6 @@
 {
   "name": "siyuan-arxiv-paper-download",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "SiYuan plugin for inserting and downloading arXiv papers.",
   "main": ".src/index.js",
   "scripts": {

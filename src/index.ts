@@ -42,6 +42,18 @@ interface UntarEntry {
     type?: string;
 }
 
+interface LlmConfig {
+    enabled: boolean;
+    baseUrl: string;
+    apiPath: string;
+    apiKey: string;
+    model: string;
+}
+
+const DEFAULT_LLM_MODEL = "deepseek-chat";
+const DEFAULT_LLM_PATH = "/chat/completions";
+const LLM_SYSTEM_PROMPT = "You are an assistant that strictly reformats scientific content into clean Markdown. Preserve every heading level, image reference, table, formula and piece of text exactly as provided without adding, omitting, or altering meaning. Return only the corrected Markdown.";
+
 export default class ArxivPaperPlugin extends Plugin {
     private isMobile = false;
 
@@ -73,6 +85,27 @@ export default class ArxivPaperPlugin extends Plugin {
     <input class="b3-text-field fn__block siyuan-arxiv-dialog__input" placeholder="${this.i18n.inputPlaceholder}" />
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__parse" />${this.i18n.parseFullTextLabel}</label>
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__omit-references" disabled />${this.i18n.omitReferencesLabel}</label>
+    <div class="siyuan-arxiv-dialog__group">
+        <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-toggle" disabled />${this.i18n.llmToggleLabel}</label>
+        <div class="siyuan-arxiv-dialog__llm-config">
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.llmBaseUrlLabel}</span>
+                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-base" placeholder="${this.i18n.llmBaseUrlPlaceholder}" disabled />
+            </label>
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.llmApiPathLabel}</span>
+                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-path" value="${DEFAULT_LLM_PATH}" placeholder="${this.i18n.llmApiPathPlaceholder}" disabled />
+            </label>
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.llmModelLabel}</span>
+                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-model" value="${DEFAULT_LLM_MODEL}" placeholder="${this.i18n.llmModelPlaceholder}" disabled />
+            </label>
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.llmApiKeyLabel}</span>
+                <input type="password" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-key" placeholder="sk-********" autocomplete="off" disabled />
+            </label>
+        </div>
+    </div>
     <div class="siyuan-arxiv-dialog__status" aria-live="polite"></div>
 </div>
 <div class="b3-dialog__action">
@@ -88,13 +121,23 @@ export default class ArxivPaperPlugin extends Plugin {
         const statusElement = dialog.element.querySelector(".siyuan-arxiv-dialog__status");
         const parseCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__parse");
         const omitReferencesCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__omit-references");
+        const llmToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-toggle");
+        const llmBaseInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-base");
+        const llmPathInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-path");
+        const llmModelInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-model");
+        const llmKeyInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-key");
 
         if (!(input instanceof HTMLInputElement)
             || !(cancelButton instanceof HTMLButtonElement)
             || !(confirmButton instanceof HTMLButtonElement)
             || !(statusElement instanceof HTMLElement)
             || !(parseCheckbox instanceof HTMLInputElement)
-            || !(omitReferencesCheckbox instanceof HTMLInputElement)) {
+            || !(omitReferencesCheckbox instanceof HTMLInputElement)
+            || !(llmToggle instanceof HTMLInputElement)
+            || !(llmBaseInput instanceof HTMLInputElement)
+            || !(llmPathInput instanceof HTMLInputElement)
+            || !(llmModelInput instanceof HTMLInputElement)
+            || !(llmKeyInput instanceof HTMLInputElement)) {
             console.error("ArxivPaperPlugin: dialog template missing expected elements", {
                 input,
                 cancelButton,
@@ -102,6 +145,11 @@ export default class ArxivPaperPlugin extends Plugin {
                 statusElement,
                 parseCheckbox,
                 omitReferencesCheckbox,
+                llmToggle,
+                llmBaseInput,
+                llmPathInput,
+                llmModelInput,
+                llmKeyInput,
             });
             showMessage(this.i18n.errorDialogInit ?? "Failed to initialize dialog.");
             dialog.destroy();
@@ -115,8 +163,23 @@ export default class ArxivPaperPlugin extends Plugin {
             }
         };
 
+        const syncLlmAvailability = () => {
+            const parseEnabled = parseCheckbox.checked;
+            llmToggle.disabled = !parseEnabled;
+            if (!parseEnabled) {
+                llmToggle.checked = false;
+            }
+            const llmEnabled = parseEnabled && llmToggle.checked;
+            [llmBaseInput, llmPathInput, llmModelInput, llmKeyInput].forEach((field) => {
+                field.disabled = !llmEnabled;
+            });
+        };
+
         parseCheckbox.addEventListener("change", syncReferenceToggle);
+        parseCheckbox.addEventListener("change", syncLlmAvailability);
+        llmToggle.addEventListener("change", syncLlmAvailability);
         syncReferenceToggle();
+        syncLlmAvailability();
 
         cancelButton.addEventListener("click", () => {
             dialog.destroy();
@@ -128,11 +191,25 @@ export default class ArxivPaperPlugin extends Plugin {
                 statusElement.classList.add("siyuan-arxiv-dialog__status--error");
                 return;
             }
+            const llmConfig: LlmConfig = {
+                enabled: parseCheckbox.checked && llmToggle.checked,
+                baseUrl: llmBaseInput.value.trim(),
+                apiPath: llmPathInput.value.trim() || DEFAULT_LLM_PATH,
+                model: llmModelInput.value.trim() || DEFAULT_LLM_MODEL,
+                apiKey: llmKeyInput.value.trim(),
+            };
+
+            if (llmConfig.enabled && (!llmConfig.baseUrl || !llmConfig.apiPath || !llmConfig.apiKey)) {
+                statusElement.textContent = this.i18n.errorLlmConfig;
+                statusElement.classList.add("siyuan-arxiv-dialog__status--error");
+                return;
+            }
             await this.handleInsert(
                 protyle,
                 input.value.trim(),
                 parseCheckbox.checked,
                 omitReferencesCheckbox.checked,
+                llmConfig,
                 statusElement,
                 confirmButton,
                 dialog,
@@ -164,6 +241,7 @@ export default class ArxivPaperPlugin extends Plugin {
         rawInput: string,
         parseFullText: boolean,
         omitReferences: boolean,
+        llmConfig: LlmConfig,
         statusElement: HTMLElement,
         confirmButton: HTMLButtonElement,
         dialog: Dialog,
@@ -184,7 +262,10 @@ export default class ArxivPaperPlugin extends Plugin {
             const metadata = await this.fetchArxivMetadata(arxivId);
 
             if (parseFullText) {
-                const markdown = await this.generateFullTextMarkdown(metadata, statusElement, {omitReferences});
+                const markdown = await this.generateFullTextMarkdown(metadata, statusElement, {
+                    omitReferences,
+                    llmConfig,
+                });
                 protyle.focus();
                 this.insertMarkdown(protyle, markdown);
                 dialog.destroy();
@@ -448,7 +529,7 @@ export default class ArxivPaperPlugin extends Plugin {
     private async generateFullTextMarkdown(
         metadata: ArxivMetadata,
         statusElement: HTMLElement,
-        options: {omitReferences: boolean},
+        options: {omitReferences: boolean; llmConfig: LlmConfig},
     ): Promise<string> {
         statusElement.textContent = this.i18n.statusFetchingHtml;
         let htmlContent: string | null = null;
@@ -462,14 +543,14 @@ export default class ArxivPaperPlugin extends Plugin {
             statusElement.textContent = this.i18n.statusConvertingHtml;
             const markdown = this.convertArxivHtmlToMarkdown(htmlContent, metadata, options);
             if (markdown) {
-                return markdown;
+                return this.applyLlmIfNeeded(markdown, statusElement, options.llmConfig);
             }
         }
 
         statusElement.textContent = this.i18n.statusFallbackLatex;
-        const latexMarkdown = await this.fetchLatexMarkdown(metadata, options);
+        const latexMarkdown = await this.fetchLatexMarkdown(metadata, {omitReferences: options.omitReferences});
         if (latexMarkdown) {
-            return latexMarkdown;
+            return this.applyLlmIfNeeded(latexMarkdown, statusElement, options.llmConfig);
         }
 
         throw new Error(this.i18n.errorParseFullTextFailed);
@@ -494,8 +575,9 @@ export default class ArxivPaperPlugin extends Plugin {
     private convertArxivHtmlToMarkdown(
         htmlContent: string,
         metadata: ArxivMetadata,
-        options: {omitReferences: boolean},
+        options: {omitReferences: boolean; llmConfig: LlmConfig},
     ): string | null {
+        const {omitReferences} = options;
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlContent, "text/html");
         const article = doc.querySelector("article.ltx_document");
@@ -529,7 +611,7 @@ export default class ArxivPaperPlugin extends Plugin {
                 ),
             );
         }
-        if (!options.omitReferences && compressionBlocks.references) {
+        if (!omitReferences && compressionBlocks.references) {
             combinedBlocks.push(
                 this.buildHeadingCodeSection(
                     this.i18n.headingReferences,
@@ -551,6 +633,165 @@ export default class ArxivPaperPlugin extends Plugin {
         }
 
         return markdown.trim();
+    }
+
+    private async applyLlmIfNeeded(markdown: string, statusElement: HTMLElement, llmConfig: LlmConfig): Promise<string> {
+        if (!llmConfig.enabled) {
+            return markdown.trim();
+        }
+        return this.refineMarkdownWithLlm(markdown, statusElement, llmConfig);
+    }
+
+    private async refineMarkdownWithLlm(markdown: string, statusElement: HTMLElement, config: LlmConfig): Promise<string> {
+        const sections = this.splitMarkdownIntoSections(markdown);
+        const sectionsToProcess = sections.filter((section) => !section.skip);
+        if (!sectionsToProcess.length) {
+            return markdown.trim();
+        }
+
+        const refinedSections: string[] = [];
+        let processedIndex = 0;
+        for (const section of sections) {
+            if (section.skip) {
+                refinedSections.push(section.content);
+                continue;
+            }
+            processedIndex += 1;
+            statusElement.textContent = (this.i18n.statusRefiningWithLlm ?? "Refining with LLM...")
+                .replace("${index}", String(processedIndex))
+                .replace("${total}", String(sectionsToProcess.length));
+
+            const refined = await this.invokeLlm(section.content, config);
+            refinedSections.push(refined.trim());
+        }
+
+        return refinedSections.join("\n\n").trim();
+    }
+
+    private splitMarkdownIntoSections(markdown: string): Array<{content: string; skip: boolean}> {
+        const normalized = markdown.replace(/\r\n?/g, "\n").trim();
+        if (!normalized) {
+            return [];
+        }
+
+        const lines = normalized.split("\n");
+        const sections: Array<{content: string; skip: boolean}> = [];
+        let current: string[] = [];
+
+        const pushCurrent = () => {
+            const content = current.join("\n").trim();
+            current = [];
+            if (!content) {
+                return;
+            }
+            sections.push({
+                content,
+                skip: this.shouldSkipLlmForSection(content),
+            });
+        };
+
+        const headingPattern = /^#{1,6}\s+/;
+        for (const line of lines) {
+            if (headingPattern.test(line) && current.length) {
+                pushCurrent();
+            }
+            current.push(line);
+        }
+        pushCurrent();
+
+        return sections;
+    }
+
+    private shouldSkipLlmForSection(content: string): boolean {
+        if (!content) {
+            return true;
+        }
+
+        if (/^```/.test(content)) {
+            return true;
+        }
+
+        const headingMatch = content.match(/^#{1,6}\s+([^\n]+)/);
+        if (headingMatch) {
+            const heading = headingMatch[1].trim().toLowerCase();
+            const protectedHeadings = [
+                this.i18n.headingAuthors,
+                this.i18n.headingReferences,
+                this.i18n.labelAcknowledgements,
+            ]
+                .map((value) => value?.toString().trim().toLowerCase())
+                .filter((value): value is string => Boolean(value));
+            if (protectedHeadings.includes(heading)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async invokeLlm(section: string, config: LlmConfig): Promise<string> {
+        const endpoint = this.resolveLlmEndpoint(config);
+        const payload = {
+            model: config.model || DEFAULT_LLM_MODEL,
+            messages: [
+                {role: "system", content: LLM_SYSTEM_PROMPT},
+                {
+                    role: "user",
+                    content: `Reformat the following Markdown section so it is valid, readable Markdown. Preserve every heading level, math expression, table structure, list, code fence, citation, image link, and textual detail exactly as written. Do not add commentary or omit content. Return only Markdown.\n\n${section}`,
+                },
+            ],
+            stream: false,
+        };
+
+        let response: Response;
+        try {
+            response = await fetch(endpoint, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${config.apiKey}`,
+                },
+                body: JSON.stringify(payload),
+            });
+        } catch (err) {
+            console.error("ArxivPaperPlugin: LLM request failed", err);
+            throw new Error(this.i18n.errorLlmRequestFailed ?? "LLM request failed.");
+        }
+
+        const raw = await response.text();
+        let data: unknown;
+        try {
+            data = raw ? JSON.parse(raw) : undefined;
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: failed to parse LLM response", err, raw);
+            data = undefined;
+        }
+
+        if (!response.ok) {
+            const serverMessage = typeof (data as {error?: {message?: string}} | undefined)?.error?.message === "string"
+                ? (data as {error?: {message?: string}}).error!.message
+                : undefined;
+            throw new Error(serverMessage || this.i18n.errorLlmRequestFailed || "LLM request failed.");
+        }
+
+        const content = (data as {choices?: Array<{message?: {content?: string}}>} | undefined)?.choices?.[0]?.message?.content;
+        if (typeof content !== "string" || !content.trim()) {
+            throw new Error(this.i18n.errorLlmInvalidResponse ?? "Invalid LLM response.");
+        }
+
+        return content;
+    }
+
+    private resolveLlmEndpoint(config: LlmConfig): string {
+        const trimmedPath = config.apiPath.trim();
+        if (/^https?:\/\//i.test(trimmedPath)) {
+            return trimmedPath;
+        }
+        const normalizedBase = config.baseUrl.trim().replace(/\/+$/, "");
+        const effectivePath = trimmedPath
+            ? (trimmedPath.startsWith("/") ? trimmedPath : `/${trimmedPath}`)
+            : DEFAULT_LLM_PATH;
+        return `${normalizedBase}${effectivePath}`;
     }
 
     private ensureAbsoluteLinks(root: Element, baseUrl: string) {

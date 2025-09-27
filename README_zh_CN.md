@@ -14,6 +14,7 @@
 - 支持 `https://arxiv.org/abs/...`、`https://arxiv.org/pdf/...` 以及 `2509.17567` 等编号格式。
 - 自动获取论文标题，下载 PDF 到 `assets/` 目录，并以标题命名。
 - 可选开启“解析全文”，优先使用 arXiv HTML 渲染转换为 Markdown（若不可用则回退解析 LaTeX 压缩包）。
+- 勾选“使用 LLM 渲染”时，可配置第三方 LLM 接口逐段修正 Markdown 中的顽固排版问题。
 - 将 HTML 表格转换为 Markdown 表格，确保在思源中能够正常横向展示数据。
 - 新增“去掉参考文献”选项，解析全文时可以选择不插入文献列表。
 - 如果 `assets/` 中已存在同名 PDF，则直接复用，避免重复下载。
@@ -24,8 +25,19 @@
 
 1. 在任意文档中输入 `/` 打开菜单。
 2. 选择 **插入 arXiv 论文**。
-3. 输入或粘贴 arXiv 链接 / 编号，视需求勾选“解析全文”（以及“去掉参考文献”），然后确认。
+3. 输入或粘贴 arXiv 链接 / 编号，视需求勾选“解析全文”（以及“去掉参考文献”）。若启用“使用 LLM 渲染”，请填写 Base URL、API 路径、模型与 API Key（例如 DeepSeek）。
 4. 若解析成功会直接插入 Markdown 内容；否则下载 PDF 并插入对应链接。
+
+### LLM 辅助渲染
+
+当 HTML 转 Markdown 后仍存在难以处理的格式时，可以开启“使用 LLM 渲染”并配置：
+
+- **LLM 基础地址**：提供 Chat Completions API 的地址（如 `https://api.deepseek.com`）。
+- **LLM API 路径**：接口路径（默认 `/chat/completions`）。
+- **LLM 模型**：调用的模型名称（默认 `deepseek-chat`）。
+- **LLM API 密钥**：用于 `Authorization: Bearer` 的密钥。
+
+插件会将 Markdown 按章节拆分并逐段发送给模型，提示其严格保持原文内容与层级，只返回修正后的 Markdown；若接口调用失败，会中止插入并给出错误提示。
 
 ## 开发
 

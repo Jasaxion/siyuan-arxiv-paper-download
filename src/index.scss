@@ -33,4 +33,23 @@
   &__status--error {
     color: var(--b3-theme-error);
   }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__llm-config {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 34px;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
 }

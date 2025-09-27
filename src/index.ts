@@ -52,6 +52,8 @@ interface LlmConfig {
 
 const DEFAULT_LLM_MODEL = "deepseek-chat";
 const DEFAULT_LLM_PATH = "/chat/completions";
+const LLM_TIMEOUT_MS = 240000;
+const LLM_MAX_CONCURRENCY = 10;
 const LLM_SYSTEM_PROMPT = "You are an assistant that strictly reformats scientific content into clean Markdown. Preserve every heading level, image reference, table, formula and piece of text exactly as provided without adding, omitting, or altering meaning. Return only the corrected Markdown.";
 
 export default class ArxivPaperPlugin extends Plugin {
@@ -541,16 +543,26 @@ export default class ArxivPaperPlugin extends Plugin {
 
         if (htmlContent) {
             statusElement.textContent = this.i18n.statusConvertingHtml;
-            const markdown = this.convertArxivHtmlToMarkdown(htmlContent, metadata, options);
-            if (markdown) {
-                return this.applyLlmIfNeeded(markdown, statusElement, options.llmConfig);
+            const htmlMarkdown = this.convertArxivHtmlToMarkdown(htmlContent, metadata, options);
+            if (htmlMarkdown) {
+                return this.applyLlmIfNeeded(
+                    htmlMarkdown.markdown,
+                    statusElement,
+                    options.llmConfig,
+                    htmlMarkdown.llmSource,
+                );
             }
         }
 
         statusElement.textContent = this.i18n.statusFallbackLatex;
         const latexMarkdown = await this.fetchLatexMarkdown(metadata, {omitReferences: options.omitReferences});
         if (latexMarkdown) {
-            return this.applyLlmIfNeeded(latexMarkdown, statusElement, options.llmConfig);
+            return this.applyLlmIfNeeded(
+                latexMarkdown.markdown,
+                statusElement,
+                options.llmConfig,
+                latexMarkdown.llmSource,
+            );
         }
 
         throw new Error(this.i18n.errorParseFullTextFailed);
@@ -576,7 +588,7 @@ export default class ArxivPaperPlugin extends Plugin {
         htmlContent: string,
         metadata: ArxivMetadata,
         options: {omitReferences: boolean; llmConfig: LlmConfig},
-    ): string | null {
+    ): {markdown: string; llmSource: string} | null {
         const {omitReferences} = options;
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlContent, "text/html");
@@ -597,8 +609,8 @@ export default class ArxivPaperPlugin extends Plugin {
         });
         turndown.use(turndownPluginGfm);
 
-        let markdown = turndown.turndown(article.innerHTML);
-        markdown = this.cleanupMarkdown(markdown);
+        const rawMarkdownBody = turndown.turndown(article.innerHTML).trim();
+        let markdown = this.cleanupMarkdown(rawMarkdownBody);
 
         const combinedBlocks: string[] = [];
         const authorsText = compressionBlocks.authors
@@ -628,44 +640,76 @@ export default class ArxivPaperPlugin extends Plugin {
             );
         }
 
-        if (combinedBlocks.length) {
-            markdown = `${combinedBlocks.join("\n\n")}` + "\n\n" + markdown;
-        }
+        const prefix = combinedBlocks.length ? `${combinedBlocks.join("\n\n")}\n\n` : "";
+        const finalMarkdown = `${prefix}${markdown}`.trim();
+        const llmSource = `${prefix}${rawMarkdownBody}`.trim();
 
-        return markdown.trim();
+        return {markdown: finalMarkdown, llmSource};
     }
 
-    private async applyLlmIfNeeded(markdown: string, statusElement: HTMLElement, llmConfig: LlmConfig): Promise<string> {
+    private async applyLlmIfNeeded(
+        markdown: string,
+        statusElement: HTMLElement,
+        llmConfig: LlmConfig,
+        llmSource?: string,
+    ): Promise<string> {
         if (!llmConfig.enabled) {
             return markdown.trim();
         }
-        return this.refineMarkdownWithLlm(markdown, statusElement, llmConfig);
+        const source = llmSource?.trim() || markdown;
+        return this.refineMarkdownWithLlm(source, statusElement, llmConfig);
     }
 
     private async refineMarkdownWithLlm(markdown: string, statusElement: HTMLElement, config: LlmConfig): Promise<string> {
         const sections = this.splitMarkdownIntoSections(markdown);
-        const sectionsToProcess = sections.filter((section) => !section.skip);
-        if (!sectionsToProcess.length) {
+        const queue = sections
+            .map((section, index) => ({section, index}))
+            .filter(({section}) => !section.skip)
+            .map(({index}) => index);
+        if (!queue.length) {
             return markdown.trim();
         }
 
-        const refinedSections: string[] = [];
-        let processedIndex = 0;
-        for (const section of sections) {
+        const total = queue.length;
+        const results: Array<string | undefined> = new Array(sections.length);
+        sections.forEach((section, index) => {
             if (section.skip) {
-                refinedSections.push(section.content);
-                continue;
+                results[index] = section.content;
             }
-            processedIndex += 1;
-            statusElement.textContent = (this.i18n.statusRefiningWithLlm ?? "Refining with LLM...")
-                .replace("${index}", String(processedIndex))
-                .replace("${total}", String(sectionsToProcess.length));
+        });
 
-            const refined = await this.invokeLlm(section.content, config);
-            refinedSections.push(refined.trim());
-        }
+        let processed = 0;
+        const updateStatus = () => {
+            const message = (this.i18n.statusRefiningWithLlm ?? "Refining with LLM...")
+                .replace("${index}", String(processed))
+                .replace("${total}", String(total));
+            statusElement.textContent = message;
+        };
 
-        return refinedSections.join("\n\n").trim();
+        const worker = async () => {
+            while (queue.length) {
+                const nextIndex = queue.shift();
+                if (nextIndex === undefined) {
+                    break;
+                }
+                const section = sections[nextIndex];
+                try {
+                    const refined = await this.invokeLlm(section.content, config);
+                    results[nextIndex] = refined.trim();
+                } finally {
+                    processed += 1;
+                    updateStatus();
+                }
+            }
+        };
+
+        const workerCount = Math.min(LLM_MAX_CONCURRENCY, total);
+        const workers = Array.from({length: workerCount}, () => worker());
+        updateStatus();
+        await Promise.all(workers);
+
+        const ordered = results.map((value, index) => (value !== undefined ? value : sections[index].content));
+        return ordered.join("\n\n").trim();
     }
 
     private splitMarkdownIntoSections(markdown: string): Array<{content: string; skip: boolean}> {
@@ -744,18 +788,28 @@ export default class ArxivPaperPlugin extends Plugin {
         };
 
         let response: Response;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
         try {
+            const headers: Record<string, string> = {"Content-Type": "application/json"};
+            if (config.apiKey) {
+                headers.Authorization = `Bearer ${config.apiKey}`;
+            }
             response = await fetch(endpoint, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${config.apiKey}`,
-                },
+                headers,
                 body: JSON.stringify(payload),
+                signal: controller.signal,
             });
         } catch (err) {
-            console.error("ArxivPaperPlugin: LLM request failed", err);
+            if ((err as DOMException | undefined)?.name === "AbortError") {
+                console.error("ArxivPaperPlugin: LLM request timed out", err);
+            } else {
+                console.error("ArxivPaperPlugin: LLM request failed", err);
+            }
             throw new Error(this.i18n.errorLlmRequestFailed ?? "LLM request failed.");
+        } finally {
+            clearTimeout(timeoutId);
         }
 
         const raw = await response.text();
@@ -919,7 +973,10 @@ export default class ArxivPaperPlugin extends Plugin {
             .trim();
     }
 
-    private async fetchLatexMarkdown(metadata: ArxivMetadata, options: {omitReferences: boolean}): Promise<string | null> {
+    private async fetchLatexMarkdown(
+        metadata: ArxivMetadata,
+        options: {omitReferences: boolean},
+    ): Promise<{markdown: string; llmSource: string} | null> {
         try {
             const archiveBuffer = await this.downloadLatexArchive(metadata);
             if (!archiveBuffer) {
@@ -962,7 +1019,7 @@ export default class ArxivPaperPlugin extends Plugin {
         buffer: ArrayBuffer,
         metadata: ArxivMetadata,
         options: {omitReferences: boolean},
-    ): Promise<string | null> {
+    ): Promise<{markdown: string; llmSource: string} | null> {
         let tarData: Uint8Array;
         try {
             tarData = gunzipSync(new Uint8Array(buffer));
@@ -1022,7 +1079,8 @@ export default class ArxivPaperPlugin extends Plugin {
         }
 
         const prefix = sections.length ? `${sections.join("\n\n")}\n\n` : "";
-        return `${prefix}${markdownBody}`.trim();
+        const combined = `${prefix}${markdownBody}`.trim();
+        return {markdown: combined, llmSource: combined};
     }
 
     private extractLatexReferences(content: string): string | undefined {

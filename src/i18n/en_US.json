@@ -1,7 +1,7 @@
 {
   "insertArxivPaper": "Insert arXiv paper",
   "inputLabel": "arXiv URL or identifier",
-  "inputPlaceholder": "https://arxiv.org/abs/2509.17567",
+  "inputPlaceholder": "https://arxiv.org/abs/2508.05592",
   "confirm": "Insert",
   "cancel": "Cancel",
   "statusFetching": "Fetching metadata...",

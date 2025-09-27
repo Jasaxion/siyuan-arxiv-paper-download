@@ -1,7 +1,7 @@
 {
   "insertArxivPaper": "插入 arXiv 论文",
   "inputLabel": "请输入 arXiv 链接或编号",
-  "inputPlaceholder": "https://arxiv.org/abs/2509.17567",
+  "inputPlaceholder": "https://arxiv.org/abs/2508.05592",
   "confirm": "插入",
   "cancel": "取消",
   "statusFetching": "正在获取元数据……",

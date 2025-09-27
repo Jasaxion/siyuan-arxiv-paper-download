@@ -5,7 +5,9 @@
 This plugin lets you download an arXiv paper and insert a link to the PDF directly from the slash menu.
 
 👋🙋‍♂️If you find this plugin helpful, please help give it a Star～🩷🌟
+
 Repository: https://github.com/Jasaxion/siyuan-arxiv-paper-download
+
 Having issues? --> https://github.com/Jasaxion/siyuan-arxiv-paper-download/issues
 
 ## Features

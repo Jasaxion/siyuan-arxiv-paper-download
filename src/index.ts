@@ -50,10 +50,19 @@ interface LlmConfig {
     model: string;
 }
 
+interface PluginSettings {
+    llmConfig: {
+        baseUrl: string;
+        apiPath: string;
+        model: string;
+        apiKey: string;
+    };
+}
+
 const DEFAULT_LLM_MODEL = "deepseek-chat";
 const DEFAULT_LLM_PATH = "/chat/completions";
 const LLM_TIMEOUT_MS = 240000;
-const LLM_MAX_CONCURRENCY = 10;
+const LLM_MAX_CONCURRENCY = 32;
 const LLM_SYSTEM_PROMPT = "You are an assistant that strictly reformats scientific content into clean Markdown. Preserve every heading level, image reference, table, formula and piece of text exactly as provided without adding, omitting, or altering meaning. Return only the corrected Markdown.";
 
 export default class ArxivPaperPlugin extends Plugin {
@@ -61,7 +70,20 @@ export default class ArxivPaperPlugin extends Plugin {
 
     private readonly slashId = "insert-arxiv-paper";
 
+    private settingsReady: Promise<void> | null = null;
+
+    private settings: PluginSettings = {
+        llmConfig: {
+            baseUrl: "",
+            apiPath: DEFAULT_LLM_PATH,
+            model: DEFAULT_LLM_MODEL,
+            apiKey: "",
+        },
+    };
+
     onload() {
+        this.settingsReady = this.loadSettings();
+        void this.settingsReady;
         this.isMobile = getFrontend() === "mobile" || getFrontend() === "browser-mobile";
         this.protyleSlash = [
             {
@@ -73,13 +95,20 @@ export default class ArxivPaperPlugin extends Plugin {
                 html: `<div class="b3-list-item__first"><span class="b3-list-item__text">${this.i18n.insertArxivPaper}</span><span class="b3-list-item__meta">arXiv</span></div>`,
                 id: this.slashId,
                 callback: (protyle: Protyle) => {
-                    this.openInsertDialog(protyle);
+                    void this.openInsertDialog(protyle);
                 },
             },
         ];
     }
 
-    private openInsertDialog(protyle: Protyle) {
+    private async openInsertDialog(protyle: Protyle) {
+        if (this.settingsReady) {
+            try {
+                await this.settingsReady;
+            } catch (err) {
+                console.warn("ArxivPaperPlugin: failed to prepare settings before opening dialog", err);
+            }
+        }
         const dialog = new Dialog({
             title: this.i18n.insertArxivPaper,
             content: `<div class="b3-dialog__content siyuan-arxiv-dialog">
@@ -165,6 +194,17 @@ export default class ArxivPaperPlugin extends Plugin {
             }
         };
 
+        const storedLlm = this.settings.llmConfig ?? {
+            baseUrl: "",
+            apiPath: DEFAULT_LLM_PATH,
+            model: DEFAULT_LLM_MODEL,
+            apiKey: "",
+        };
+        llmBaseInput.value = storedLlm.baseUrl ?? "";
+        llmPathInput.value = storedLlm.apiPath || DEFAULT_LLM_PATH;
+        llmModelInput.value = storedLlm.model || DEFAULT_LLM_MODEL;
+        llmKeyInput.value = storedLlm.apiKey ?? "";
+
         const syncLlmAvailability = () => {
             const parseEnabled = parseCheckbox.checked;
             llmToggle.disabled = !parseEnabled;
@@ -206,6 +246,8 @@ export default class ArxivPaperPlugin extends Plugin {
                 statusElement.classList.add("siyuan-arxiv-dialog__status--error");
                 return;
             }
+
+            await this.persistLlmConfig(llmConfig);
             await this.handleInsert(
                 protyle,
                 input.value.trim(),
@@ -762,15 +804,67 @@ export default class ArxivPaperPlugin extends Plugin {
                 this.i18n.headingAuthors,
                 this.i18n.headingReferences,
                 this.i18n.labelAcknowledgements,
+                "authors",
+                "author",
+                "references",
+                "reference",
+                "bibliography",
             ]
                 .map((value) => value?.toString().trim().toLowerCase())
                 .filter((value): value is string => Boolean(value));
-            if (protectedHeadings.includes(heading)) {
+            if (protectedHeadings.includes(heading) || protectedHeadings.some((value) => heading.includes(value))) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private async loadSettings(): Promise<void> {
+        try {
+            const stored = await this.loadData("settings");
+            if (stored && typeof stored === "object") {
+                const llmConfig = (stored as Partial<PluginSettings>).llmConfig;
+                this.settings = {
+                    llmConfig: {
+                        baseUrl: llmConfig?.baseUrl ?? "",
+                        apiPath: llmConfig?.apiPath || DEFAULT_LLM_PATH,
+                        model: llmConfig?.model || DEFAULT_LLM_MODEL,
+                        apiKey: llmConfig?.apiKey ?? "",
+                    },
+                };
+                return;
+            }
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: failed to load settings", err);
+        }
+        this.settings = {
+            llmConfig: {
+                baseUrl: "",
+                apiPath: DEFAULT_LLM_PATH,
+                model: DEFAULT_LLM_MODEL,
+                apiKey: "",
+            },
+        };
+    }
+
+    private async persistLlmConfig(config: LlmConfig) {
+        const nextConfig = {
+            baseUrl: config.baseUrl,
+            apiPath: config.apiPath,
+            model: config.model,
+            apiKey: config.apiKey,
+        };
+        const hasChanges = Object.entries(nextConfig).some(([key, value]) => this.settings.llmConfig[key as keyof PluginSettings["llmConfig"]] !== value);
+        if (!hasChanges) {
+            return;
+        }
+        this.settings.llmConfig = nextConfig;
+        try {
+            await this.saveData("settings", this.settings);
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: failed to save settings", err);
+        }
     }
 
     private async invokeLlm(section: string, config: LlmConfig): Promise<string> {

@@ -1,5 +1,7 @@
 # arXiv Paper Downloader for SiYuan
 
+[中文](https://github.com/Jasaxion/siyuan-arxiv-paper-download/blob/main/README_zh_CN.md)
+
 This plugin lets you download an arXiv paper and insert a link to the PDF directly from the slash menu.
 
 ## Features

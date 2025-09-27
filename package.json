@@ -1,19 +1,15 @@
 {
-  "name": "siyuan-arxiv-paper-download",
-  "version": "0.1.0",
-  "description": "SiYuan plugin for inserting and downloading arXiv papers.",
+  "name": "plugin-sample",
+  "version": "0.4.2",
+  "description": "This is a sample plugin for Siyuan (https://b3log.org/siyuan)",
   "main": ".src/index.js",
   "scripts": {
     "lint": "eslint . --fix --cache",
     "dev": "webpack --mode development",
     "build": "webpack --mode production"
   },
-  "keywords": [
-    "siyuan",
-    "arxiv",
-    "pdf"
-  ],
-  "author": "Jasaxion",
+  "keywords": [],
+  "author": "Vanessa",
   "license": "MIT",
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "8.40.0",

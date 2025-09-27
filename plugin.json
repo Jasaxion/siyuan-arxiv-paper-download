@@ -1,8 +1,8 @@
 {
-  "name": "siyuan-arxiv-paper-download",
-  "author": "Jasaxion",
-  "url": "https://github.com/Jasaxion/siyuan-arxiv-paper-download",
-  "version": "0.1.0",
+  "name": "plugin-sample",
+  "author": "Vanessa",
+  "url": "https://github.com/siyuan-note/plugin-sample",
+  "version": "0.4.2",
   "minAppVersion": "3.3.0",
   "backends": [
     "windows",
@@ -22,12 +22,12 @@
   ],
   "disabledInPublish": false,
   "displayName": {
-    "default": "arXiv Paper Downloader",
-    "zh_CN": "arXiv 论文下载器"
+    "default": "Plugin Sample",
+    "zh_CN": "插件示例"
   },
   "description": {
-    "default": "Insert and download arXiv papers directly into SiYuan.",
-    "zh_CN": "在思源笔记中直接插入并下载 arXiv 论文 PDF。"
+    "default": "This is a plugin sample",
+    "zh_CN": "这是一个插件示例"
   },
   "readme": {
     "default": "README.md",
@@ -42,8 +42,7 @@
     ]
   },
   "keywords": [
-    "arxiv",
-    "pdf",
-    "download"
+    "sample",
+    "示例"
   ]
 }

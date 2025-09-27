@@ -8,6 +8,7 @@ This plugin lets you download an arXiv paper and insert a link to the PDF direct
 - Accepts `https://arxiv.org/abs/...`, `https://arxiv.org/pdf/...`, or raw identifiers such as `2509.17567`.
 - Downloads the PDF, stores it in `assets/`, and inserts a Markdown link using the paper title as the filename.
 - Skips re-downloading when the titled PDF already exists in `assets/` and simply reuses it.
+- Can be used in conjunction with the additional plugin PaperLess to achieve global management of personal academic paper documents: [PaperLess](https://github.com/Jasaxion/siyuan-paperless)
 
 ## Usage
 

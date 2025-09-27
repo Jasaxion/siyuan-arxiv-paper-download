@@ -9,6 +9,7 @@
 - 自动获取论文标题，下载 PDF 到 `assets/` 目录，并以标题命名。
 - 如果 `assets/` 中已存在同名 PDF，则直接复用，避免重复下载。
 - 在文档中插入 `[论文标题.pdf](assets/论文标题.pdf)` 格式的链接。
+- 可以配合另外的插件 PaperLess 实现全局的个人论文文档库管理: [PaperLess](https://github.com/Jasaxion/siyuan-paperless)
 
 ## 使用方法
 

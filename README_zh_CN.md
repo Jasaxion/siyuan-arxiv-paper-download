@@ -2,6 +2,10 @@
 
 该插件在思源笔记的斜杠菜单中提供 **插入 arXiv 论文** 功能，自动下载 arXiv PDF 并插入链接。
 
+👋🙋‍♂️如果你觉得这个插件对你有帮助，请帮忙点个 Star 吧～🩷🌟
+仓库：https://github.com/Jasaxion/siyuan-arxiv-paper-download
+若遇到问题请前往：https://github.com/Jasaxion/siyuan-arxiv-paper-download/issues
+
 ## 功能
 
 - 在输入 `/` 时新增 **插入 arXiv 论文** 菜单项。

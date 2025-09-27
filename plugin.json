@@ -4,23 +4,9 @@
   "url": "https://github.com/Jasaxion/siyuan-arxiv-paper-download",
   "version": "0.1.0",
   "minAppVersion": "3.3.0",
-  "backends": [
-    "windows",
-    "linux",
-    "darwin",
-    "ios",
-    "android",
-    "harmony",
-    "docker"
-  ],
-  "frontends": [
-    "desktop",
-    "mobile",
-    "browser-desktop",
-    "browser-mobile",
-    "desktop-window"
-  ],
-  "disabledInPublish": false,
+  "backends": "all",
+  "frontends": "all",
+  "disabledInPublish": true,
   "displayName": {
     "default": "arXiv Paper Downloader",
     "zh_CN": "arXiv 论文下载器"
@@ -34,16 +20,11 @@
     "zh_CN": "README_zh_CN.md"
   },
   "funding": {
-    "openCollective": "",
-    "patreon": "",
-    "github": "https://github.com/Jasaxion",
     "custom": [
       "https://github.com/Jasaxion"
     ]
   },
   "keywords": [
-    "arxiv",
-    "pdf",
-    "download"
+    "pdf"
   ]
 }

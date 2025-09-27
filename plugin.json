@@ -2,7 +2,7 @@
   "name": "siyuan-arxiv-paper-download",
   "author": "Jasaxion(BaiBo)",
   "url": "https://github.com/Jasaxion/siyuan-arxiv-paper-download",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "minAppVersion": "3.3.0",
   "backends": "all",
   "frontends": "all",

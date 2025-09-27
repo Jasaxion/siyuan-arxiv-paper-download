@@ -17,5 +17,16 @@
   "errorNotFound": "The specified arXiv paper was not found.",
   "errorMissingTitle": "The paper title could not be determined.",
   "errorDownloadPdf": "Failed to download the PDF file.",
-  "errorUploadPdf": "Failed to upload the PDF to SiYuan."
+  "errorUploadPdf": "Failed to upload the PDF to SiYuan.",
+  "parseFullTextLabel": "Parse full text",
+  "successParsedMessage": "Inserted parsed content for ${title}",
+  "statusFetchingHtml": "Fetching HTML rendering...",
+  "statusConvertingHtml": "Converting HTML to Markdown...",
+  "statusFallbackLatex": "Falling back to LaTeX archive...",
+  "errorParseFullTextFailed": "Failed to parse full text.",
+  "errorFetchHtml": "Failed to fetch HTML rendering from arXiv.",
+  "labelAuthors": "Authors",
+  "labelReferences": "References",
+  "labelAcknowledgements": "Acknowledgements",
+  "labelFigurePlaceholder": "Figure"
 }

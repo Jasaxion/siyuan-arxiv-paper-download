@@ -17,5 +17,16 @@
   "errorNotFound": "未找到对应的 arXiv 论文。",
   "errorMissingTitle": "无法获取论文标题。",
   "errorDownloadPdf": "下载 PDF 文件失败。",
-  "errorUploadPdf": "上传 PDF 到思源失败。"
+  "errorUploadPdf": "上传 PDF 到思源失败。",
+  "parseFullTextLabel": "解析全文",
+  "successParsedMessage": "已插入 ${title} 的解析内容",
+  "statusFetchingHtml": "正在获取 HTML 渲染...",
+  "statusConvertingHtml": "正在转换为 Markdown...",
+  "statusFallbackLatex": "尝试使用 LaTeX 压缩包...",
+  "errorParseFullTextFailed": "解析全文失败。",
+  "errorFetchHtml": "获取 arXiv HTML 渲染失败。",
+  "labelAuthors": "作者",
+  "labelReferences": "参考文献",
+  "labelAcknowledgements": "致谢",
+  "labelFigurePlaceholder": "图"
 }

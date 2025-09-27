@@ -48,6 +48,13 @@ interface LlmConfig {
     apiPath: string;
     apiKey: string;
     model: string;
+    fullInput: boolean;
+}
+
+interface LlmContextOptions {
+    llmSource?: string;
+    llmFullSource?: string;
+    prefix?: string;
 }
 
 interface PluginSettings {
@@ -59,9 +66,17 @@ interface PluginSettings {
     };
 }
 
+interface MarkdownConversionResult {
+    markdown: string;
+    llmSource: string;
+    llmFullSource?: string;
+    prefix?: string;
+}
+
 const DEFAULT_LLM_MODEL = "deepseek-chat";
 const DEFAULT_LLM_PATH = "/chat/completions";
 const LLM_TIMEOUT_MS = 240000;
+const LLM_FULL_INPUT_TIMEOUT_MS = 480000;
 const LLM_MAX_CONCURRENCY = 32;
 const LLM_SYSTEM_PROMPT = "You are an assistant that strictly reformats scientific content into clean Markdown. Preserve every heading level, image reference, table, formula and piece of text exactly as provided without adding, omitting, or altering meaning. Return only the corrected Markdown.";
 
@@ -118,6 +133,7 @@ export default class ArxivPaperPlugin extends Plugin {
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__omit-references" disabled />${this.i18n.omitReferencesLabel}</label>
     <div class="siyuan-arxiv-dialog__group">
         <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-toggle" disabled />${this.i18n.llmToggleLabel}</label>
+        <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-full-input" disabled />${this.i18n.llmFullInputLabel}</label>
         <div class="siyuan-arxiv-dialog__llm-config">
             <label class="siyuan-arxiv-dialog__field">
                 <span class="siyuan-arxiv-dialog__label">${this.i18n.llmBaseUrlLabel}</span>
@@ -153,6 +169,7 @@ export default class ArxivPaperPlugin extends Plugin {
         const parseCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__parse");
         const omitReferencesCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__omit-references");
         const llmToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-toggle");
+        const llmFullInputToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-full-input");
         const llmBaseInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-base");
         const llmPathInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-path");
         const llmModelInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-model");
@@ -165,6 +182,7 @@ export default class ArxivPaperPlugin extends Plugin {
             || !(parseCheckbox instanceof HTMLInputElement)
             || !(omitReferencesCheckbox instanceof HTMLInputElement)
             || !(llmToggle instanceof HTMLInputElement)
+            || !(llmFullInputToggle instanceof HTMLInputElement)
             || !(llmBaseInput instanceof HTMLInputElement)
             || !(llmPathInput instanceof HTMLInputElement)
             || !(llmModelInput instanceof HTMLInputElement)
@@ -177,6 +195,7 @@ export default class ArxivPaperPlugin extends Plugin {
                 parseCheckbox,
                 omitReferencesCheckbox,
                 llmToggle,
+                llmFullInputToggle,
                 llmBaseInput,
                 llmPathInput,
                 llmModelInput,
@@ -212,6 +231,10 @@ export default class ArxivPaperPlugin extends Plugin {
                 llmToggle.checked = false;
             }
             const llmEnabled = parseEnabled && llmToggle.checked;
+            llmFullInputToggle.disabled = !llmEnabled;
+            if (!llmEnabled) {
+                llmFullInputToggle.checked = false;
+            }
             [llmBaseInput, llmPathInput, llmModelInput, llmKeyInput].forEach((field) => {
                 field.disabled = !llmEnabled;
             });
@@ -239,6 +262,7 @@ export default class ArxivPaperPlugin extends Plugin {
                 apiPath: llmPathInput.value.trim() || DEFAULT_LLM_PATH,
                 model: llmModelInput.value.trim() || DEFAULT_LLM_MODEL,
                 apiKey: llmKeyInput.value.trim(),
+                fullInput: llmFullInputToggle.checked,
             };
 
             if (llmConfig.enabled && (!llmConfig.baseUrl || !llmConfig.apiPath || !llmConfig.apiKey)) {
@@ -591,7 +615,11 @@ export default class ArxivPaperPlugin extends Plugin {
                     htmlMarkdown.markdown,
                     statusElement,
                     options.llmConfig,
-                    htmlMarkdown.llmSource,
+                    {
+                        llmSource: htmlMarkdown.llmSource,
+                        llmFullSource: htmlMarkdown.llmFullSource,
+                        prefix: htmlMarkdown.prefix,
+                    },
                 );
             }
         }
@@ -603,7 +631,11 @@ export default class ArxivPaperPlugin extends Plugin {
                 latexMarkdown.markdown,
                 statusElement,
                 options.llmConfig,
-                latexMarkdown.llmSource,
+                {
+                    llmSource: latexMarkdown.llmSource,
+                    llmFullSource: latexMarkdown.llmFullSource,
+                    prefix: latexMarkdown.prefix,
+                },
             );
         }
 
@@ -630,7 +662,7 @@ export default class ArxivPaperPlugin extends Plugin {
         htmlContent: string,
         metadata: ArxivMetadata,
         options: {omitReferences: boolean; llmConfig: LlmConfig},
-    ): {markdown: string; llmSource: string} | null {
+    ): MarkdownConversionResult | null {
         const {omitReferences} = options;
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlContent, "text/html");
@@ -682,27 +714,55 @@ export default class ArxivPaperPlugin extends Plugin {
             );
         }
 
-        const prefix = combinedBlocks.length ? `${combinedBlocks.join("\n\n")}\n\n` : "";
-        const finalMarkdown = `${prefix}${markdown}`.trim();
-        const llmSource = `${prefix}${rawMarkdownBody}`.trim();
+        const prefix = combinedBlocks.length ? combinedBlocks.join("\n\n") : "";
+        const prefixWithSpacing = prefix ? `${prefix}\n\n` : "";
+        const finalMarkdown = `${prefixWithSpacing}${markdown}`.trim();
+        const llmSource = `${prefixWithSpacing}${rawMarkdownBody}`.trim();
 
-        return {markdown: finalMarkdown, llmSource};
+        return {
+            markdown: finalMarkdown,
+            llmSource,
+            llmFullSource: rawMarkdownBody,
+            prefix,
+        };
     }
 
     private async applyLlmIfNeeded(
         markdown: string,
         statusElement: HTMLElement,
         llmConfig: LlmConfig,
-        llmSource?: string,
+        context?: LlmContextOptions,
     ): Promise<string> {
+        const trimmedMarkdown = markdown.trim();
         if (!llmConfig.enabled) {
-            return markdown.trim();
+            return trimmedMarkdown;
         }
-        const source = llmSource?.trim() || markdown;
-        return this.refineMarkdownWithLlm(source, statusElement, llmConfig);
+        const source = context?.llmSource?.trim() || trimmedMarkdown;
+        return this.refineMarkdownWithLlm(source, statusElement, llmConfig, {
+            prefix: context?.prefix,
+            fullSource: context?.llmFullSource,
+        });
     }
 
-    private async refineMarkdownWithLlm(markdown: string, statusElement: HTMLElement, config: LlmConfig): Promise<string> {
+    private async refineMarkdownWithLlm(
+        markdown: string,
+        statusElement: HTMLElement,
+        config: LlmConfig,
+        context?: {prefix?: string; fullSource?: string},
+    ): Promise<string> {
+        if (config.fullInput) {
+            const fullSource = context?.fullSource?.trim() || markdown;
+            if (!fullSource) {
+                return markdown.trim();
+            }
+            statusElement.textContent = this.i18n.statusRefiningWithLlmFull
+                ?? "Refining full document with the LLM...";
+            const refined = await this.invokeLlm(fullSource, config, LLM_FULL_INPUT_TIMEOUT_MS);
+            const prefix = context?.prefix?.trim();
+            const prefixWithSpacing = prefix ? `${prefix}\n\n` : "";
+            return `${prefixWithSpacing}${refined.trim()}`.trim();
+        }
+
         const sections = this.splitMarkdownIntoSections(markdown);
         const queue = sections
             .map((section, index) => ({section, index}))
@@ -867,7 +927,7 @@ export default class ArxivPaperPlugin extends Plugin {
         }
     }
 
-    private async invokeLlm(section: string, config: LlmConfig): Promise<string> {
+    private async invokeLlm(section: string, config: LlmConfig, timeoutMs = LLM_TIMEOUT_MS): Promise<string> {
         const endpoint = this.resolveLlmEndpoint(config);
         const payload = {
             model: config.model || DEFAULT_LLM_MODEL,
@@ -883,7 +943,7 @@ export default class ArxivPaperPlugin extends Plugin {
 
         let response: Response;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         try {
             const headers: Record<string, string> = {"Content-Type": "application/json"};
             if (config.apiKey) {
@@ -1070,7 +1130,7 @@ export default class ArxivPaperPlugin extends Plugin {
     private async fetchLatexMarkdown(
         metadata: ArxivMetadata,
         options: {omitReferences: boolean},
-    ): Promise<{markdown: string; llmSource: string} | null> {
+    ): Promise<MarkdownConversionResult | null> {
         try {
             const archiveBuffer = await this.downloadLatexArchive(metadata);
             if (!archiveBuffer) {
@@ -1113,7 +1173,7 @@ export default class ArxivPaperPlugin extends Plugin {
         buffer: ArrayBuffer,
         metadata: ArxivMetadata,
         options: {omitReferences: boolean},
-    ): Promise<{markdown: string; llmSource: string} | null> {
+    ): Promise<MarkdownConversionResult | null> {
         let tarData: Uint8Array;
         try {
             tarData = gunzipSync(new Uint8Array(buffer));
@@ -1172,9 +1232,16 @@ export default class ArxivPaperPlugin extends Plugin {
             );
         }
 
-        const prefix = sections.length ? `${sections.join("\n\n")}\n\n` : "";
-        const combined = `${prefix}${markdownBody}`.trim();
-        return {markdown: combined, llmSource: combined};
+        const prefix = sections.length ? sections.join("\n\n") : "";
+        const prefixWithSpacing = prefix ? `${prefix}\n\n` : "";
+        const body = markdownBody.trim();
+        const combined = `${prefixWithSpacing}${body}`.trim();
+        return {
+            markdown: combined,
+            llmSource: combined,
+            llmFullSource: body,
+            prefix,
+        };
     }
 
     private extractLatexReferences(content: string): string | undefined {

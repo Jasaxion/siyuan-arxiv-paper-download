@@ -17,6 +17,7 @@ Having issues? --> https://github.com/Jasaxion/siyuan-arxiv-paper-download/issue
 - Downloads the PDF, stores it in `assets/`, and inserts a Markdown link using the paper title as the filename.
 - Optionally parses the paper into Markdown via arXiv's HTML rendering (with a LaTeX archive fallback) when **Parse full text** is enabled.
 - Can optionally clean up each section with a configurable LLM endpoint to fix stubborn Markdown formatting when **Use LLM rendering** is enabled.
+- Supports a **Send full document to LLM** toggle for long-context models that prefer receiving the entire Markdown at once.
 - Converts HTML tables to GitHub-flavored Markdown so numeric data stays readable inside SiYuan.
 - Adds an **Omit references** toggle so you can skip inserting the bibliography when parsing the full text.
 - Skips re-downloading when the titled PDF already exists in `assets/` and simply reuses it.
@@ -26,7 +27,7 @@ Having issues? --> https://github.com/Jasaxion/siyuan-arxiv-paper-download/issue
 
 1. Open any document in SiYuan and type `/` to open the slash menu.
 2. Select **Insert arXiv paper**.
-3. Paste an arXiv link or identifier in the dialog, optionally enable **Parse full text** (and **Omit references** if desired). When parsing, you can also toggle **Use LLM rendering** and supply the base URL, API path, model, and API key for providers such as DeepSeek.
+3. Paste an arXiv link or identifier in the dialog, optionally enable **Parse full text** (and **Omit references** if desired). When parsing, you can also toggle **Use LLM rendering**, provide the base URL, API path, model, and API key for providers such as DeepSeek, and decide whether to **Send full document to LLM**.
 4. Either the parsed Markdown content is inserted directly, or the PDF is saved under `assets/` and a link like `[paper-title.pdf](assets/paper-title.pdf)` is added.
 
 ### LLM-assisted rendering
@@ -38,7 +39,7 @@ If the raw HTML-to-Markdown conversion still produces awkward formatting, turn o
 - **LLM model**: The model name to request (defaults to `deepseek-chat`).
 - **LLM API key**: The secret used in the `Authorization: Bearer` header.
 
-The plugin will send each Markdown section individually with a strict prompt that forbids hallucinations, expecting the model to return corrected Markdown only. Any network or response failure aborts the insert with a clear error.
+The plugin sends Markdown to the model with a strict prompt that forbids hallucinations and expects corrected Markdown only. By default it refines sections concurrently (up to 32 at a time); enable **Send full document to LLM** to post the entire parse in one request with an extended timeout for models that support very long contexts. Any network or response failure aborts the insert with a clear error.
 
 ## Development
 

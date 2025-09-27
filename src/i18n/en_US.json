@@ -27,6 +27,7 @@
   "statusFallbackLatex": "Falling back to LaTeX archive...",
   "errorParseFullTextFailed": "Failed to parse full text.",
   "errorFetchHtml": "Failed to fetch HTML rendering from arXiv.",
+  "errorConvertMarkdown": "Failed to prepare Markdown for insertion.",
   "headingAuthors": "Authors",
   "headingReferences": "References",
   "labelAuthors": "Authors",

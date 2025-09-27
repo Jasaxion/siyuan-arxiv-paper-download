@@ -27,6 +27,7 @@
   "statusFallbackLatex": "尝试使用 LaTeX 压缩包...",
   "errorParseFullTextFailed": "解析全文失败。",
   "errorFetchHtml": "获取 arXiv HTML 渲染失败。",
+  "errorConvertMarkdown": "无法准备 Markdown 内容用于插入。",
   "headingAuthors": "作者",
   "headingReferences": "参考文献",
   "labelAuthors": "作者",

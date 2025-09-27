@@ -1,4 +1,5 @@
-import {Dialog, Plugin, Protyle, showMessage, getFrontend, Lute} from "siyuan";
+import {Dialog, Plugin, Protyle, showMessage, getFrontend} from "siyuan";
+import type {Lute} from "siyuan";
 import TurndownService from "turndown";
 import {gunzipSync} from "fflate";
 import untar from "js-untar";
@@ -183,10 +184,9 @@ export default class ArxivPaperPlugin extends Plugin {
 
             if (parseFullText) {
                 const markdown = await this.generateFullTextMarkdown(metadata, statusElement, {omitReferences});
-                dialog.destroy();
                 protyle.focus();
-                const contentToInsert = markdown.endsWith("\n") ? markdown : `${markdown}\n`;
-                this.insertMarkdown(protyle, contentToInsert);
+                this.insertMarkdown(protyle, markdown);
+                dialog.destroy();
                 showMessage(this.i18n.successParsedMessage.replace("${title}", metadata.title));
                 return;
             }
@@ -211,9 +211,9 @@ export default class ArxivPaperPlugin extends Plugin {
             }
 
             const markdownLink = `[${fileName}](${assetPath})`;
-            dialog.destroy();
             protyle.focus();
             this.insertMarkdown(protyle, markdownLink);
+            dialog.destroy();
             const successTemplate = reusedExisting ? this.i18n.successReusedMessage : this.i18n.successMessage;
             showMessage(successTemplate.replace("${title}", metadata.title));
         } catch (error) {
@@ -407,9 +407,41 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private insertMarkdown(protyle: Protyle, markdown: string) {
-        const lute = Lute.New();
-        const html = lute.Md2BlockDOM(markdown);
-        protyle.insert(html, true, true);
+        const normalized = markdown.endsWith("\n") ? markdown : `${markdown}\n`;
+        const lute = this.getLute(protyle);
+        try {
+            const html = lute.Md2BlockDOM(normalized);
+            protyle.insert(html, true, true);
+        } catch (err) {
+            console.error("ArxivPaperPlugin: failed to convert markdown to block DOM", err);
+            throw new Error(this.i18n.errorConvertMarkdown ?? "Failed to insert Markdown content.");
+        }
+    }
+
+    private getLute(protyle: Protyle): Lute {
+        const protyleLute = (protyle as unknown as {protyle?: {lute?: Lute}}).protyle?.lute;
+        if (protyleLute && typeof protyleLute.Md2BlockDOM === "function") {
+            return protyleLute;
+        }
+
+        const appLute = (this.app as unknown as {lute?: Lute}).lute;
+        if (appLute && typeof appLute.Md2BlockDOM === "function") {
+            return appLute;
+        }
+
+        const globalLuteFactory = (globalThis as typeof globalThis & {Lute?: {New?: () => Lute}}).Lute;
+        if (globalLuteFactory?.New) {
+            try {
+                const instance = globalLuteFactory.New();
+                if (instance && typeof instance.Md2BlockDOM === "function") {
+                    return instance;
+                }
+            } catch (err) {
+                console.warn("ArxivPaperPlugin: failed to instantiate global Lute", err);
+            }
+        }
+
+        throw new Error(this.i18n.errorConvertMarkdown ?? "Failed to insert Markdown content.");
     }
 
     private async generateFullTextMarkdown(

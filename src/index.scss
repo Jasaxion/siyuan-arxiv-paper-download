@@ -12,6 +12,18 @@
     width: 100%;
   }
 
+  &__checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--b3-font-size);
+    color: var(--b3-theme-on-background);
+  }
+
+  &__checkbox .b3-switch {
+    margin-right: 8px;
+  }
+
   &__status {
     min-height: 20px;
     font-size: var(--b3-font-size-small);
@@ -20,5 +32,24 @@
 
   &__status--error {
     color: var(--b3-theme-error);
+  }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__llm-config {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 34px;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 }

@@ -108,11 +108,16 @@ interface ForwardProxyData {
     bodyEncoding?: string;
 }
 
+interface ForwardProxyHeader {
+    name: string;
+    value: string;
+}
+
 interface ForwardProxyPayload {
     url: string;
     method: string;
     timeout?: number;
-    headers?: Array<Record<string, string>>;
+    headers?: ForwardProxyHeader[];
     contentType?: string;
     payload?: string;
     payloadEncoding?: string;
@@ -353,6 +358,9 @@ export default class ArxivPaperPlugin extends Plugin {
             dialog.destroy();
             return;
         }
+
+        this.suppressPasswordPrompts(llmKeyInput);
+        this.suppressPasswordPrompts(mineruKeyInput);
 
         const storedLlm = this.settings.llmConfig ?? {
             baseUrl: "",
@@ -812,7 +820,7 @@ export default class ArxivPaperPlugin extends Plugin {
             response = await fetch(endpoint, {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify(payload),
+                body: JSON.stringify(this.normalizeProxyPayload(payload)),
             });
         } catch (error) {
             throw new Error(this.i18n.errorProxyRequest);
@@ -858,6 +866,69 @@ export default class ArxivPaperPlugin extends Plugin {
         }
 
         return data;
+    }
+
+    private normalizeProxyPayload(payload: ForwardProxyPayload): Record<string, unknown> {
+        const headers = (payload.headers ?? []).map((header) => {
+            if (header.name && header.value != null) {
+                return header;
+            }
+            const [[key, value]] = Object.entries(header as unknown as Record<string, string>);
+            return {name: key, value};
+        });
+
+        const body: Record<string, unknown> = {
+            url: payload.url,
+            method: payload.method,
+        };
+
+        if (payload.timeout != null) {
+            body.timeout = payload.timeout;
+        }
+        if (headers.length) {
+            body.headers = headers;
+        }
+        if (payload.contentType) {
+            body.contentType = payload.contentType;
+        }
+        if (payload.responseEncoding) {
+            body.responseEncoding = payload.responseEncoding;
+        }
+
+        const proxyRequest: Record<string, unknown> = {};
+        const requestClone: Record<string, unknown> = {
+            url: payload.url,
+            method: payload.method,
+        };
+
+        if (payload.payload !== undefined) {
+            body.payload = payload.payload;
+            body.body = payload.payload;
+            body.data = payload.payload;
+            requestClone.body = payload.payload;
+            requestClone.payload = payload.payload;
+        }
+        if (payload.payloadEncoding) {
+            body.payloadEncoding = payload.payloadEncoding;
+            body.bodyEncoding = payload.payloadEncoding;
+            requestClone.payloadEncoding = payload.payloadEncoding;
+        }
+        if (headers.length) {
+            requestClone.headers = headers;
+        }
+        if (payload.timeout != null) {
+            requestClone.timeout = payload.timeout;
+        }
+        if (payload.contentType) {
+            requestClone.contentType = payload.contentType;
+        }
+        if (payload.responseEncoding) {
+            requestClone.responseEncoding = payload.responseEncoding;
+        }
+
+        proxyRequest.req = requestClone;
+
+        return {...body, ...proxyRequest};
     }
 
     private async forwardProxyRequest(payload: ForwardProxyPayload): Promise<ForwardProxyData> {
@@ -913,10 +984,21 @@ export default class ArxivPaperPlugin extends Plugin {
         throw new Error(this.i18n.errorProxyEncoding.replace("${encoding}", bodyEncoding ?? "unknown"));
     }
 
-    private createProxyHeaders(headers: Record<string, string>): Array<Record<string, string>> {
+    private createProxyHeaders(headers: Record<string, string>): ForwardProxyHeader[] {
         return Object.entries(headers)
             .filter(([, value]) => Boolean(value))
-            .map(([key, value]) => ({[key]: value}));
+            .map(([key, value]) => ({name: key, value}));
+    }
+
+    private suppressPasswordPrompts(input: HTMLInputElement) {
+        input.autocomplete = "new-password";
+        input.setAttribute("data-lpignore", "true");
+        input.setAttribute("data-1p-ignore", "true");
+        input.setAttribute("data-1password-ignore", "true");
+        input.setAttribute("data-form-type", "other");
+        input.autocapitalize = "off";
+        input.setAttribute("autocorrect", "off");
+        input.spellcheck = false;
     }
 
     private decodeBase64(data: string): Uint8Array {

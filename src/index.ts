@@ -70,6 +70,7 @@ interface MineruConfig {
 }
 
 interface PluginSettings {
+    workspaceApiToken: string;
     llmConfig: {
         baseUrl: string;
         apiPath: string;
@@ -168,6 +169,7 @@ export default class ArxivPaperPlugin extends Plugin {
     private settingsReady: Promise<void> | null = null;
 
     private settings: PluginSettings = {
+        workspaceApiToken: "",
         llmConfig: {
             baseUrl: "",
             apiPath: DEFAULT_LLM_PATH,
@@ -221,6 +223,10 @@ export default class ArxivPaperPlugin extends Plugin {
     <input class="b3-text-field fn__block siyuan-arxiv-dialog__input" placeholder="${this.i18n.inputPlaceholder}" />
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__parse" />${this.i18n.parseFullTextLabel}</label>
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__omit-references" disabled />${this.i18n.omitReferencesLabel}</label>
+    <label class="siyuan-arxiv-dialog__field siyuan-arxiv-dialog__field--token">
+        <span class="siyuan-arxiv-dialog__label">${this.i18n.workspaceTokenLabel}</span>
+        <input type="password" maxlength="256" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__workspace-token" placeholder="${this.i18n.workspaceTokenPlaceholder}" autocomplete="off" />
+    </label>
         <div class="siyuan-arxiv-dialog__group">
             <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-toggle" disabled />${this.i18n.llmToggleLabel}</label>
             <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-full-input" disabled />${this.i18n.llmFullInputLabel}</label>
@@ -288,6 +294,7 @@ export default class ArxivPaperPlugin extends Plugin {
         const statusElement = dialog.element.querySelector(".siyuan-arxiv-dialog__status");
         const parseCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__parse");
         const omitReferencesCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__omit-references");
+        const workspaceTokenInput = dialog.element.querySelector(".siyuan-arxiv-dialog__workspace-token");
         const llmToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-toggle");
         const llmFullInputToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-full-input");
         const llmConfigContainer = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-config");
@@ -312,6 +319,7 @@ export default class ArxivPaperPlugin extends Plugin {
             || !(statusElement instanceof HTMLElement)
             || !(parseCheckbox instanceof HTMLInputElement)
             || !(omitReferencesCheckbox instanceof HTMLInputElement)
+            || !(workspaceTokenInput instanceof HTMLInputElement)
             || !(llmToggle instanceof HTMLInputElement)
             || !(llmFullInputToggle instanceof HTMLInputElement)
             || !(llmConfigContainer instanceof HTMLElement)
@@ -336,6 +344,7 @@ export default class ArxivPaperPlugin extends Plugin {
                 statusElement,
                 parseCheckbox,
                 omitReferencesCheckbox,
+                workspaceTokenInput,
                 llmToggle,
                 llmFullInputToggle,
                 llmConfigContainer,
@@ -361,6 +370,7 @@ export default class ArxivPaperPlugin extends Plugin {
 
         this.suppressPasswordPrompts(llmKeyInput);
         this.suppressPasswordPrompts(mineruKeyInput);
+        this.suppressPasswordPrompts(workspaceTokenInput);
 
         const storedLlm = this.settings.llmConfig ?? {
             baseUrl: "",
@@ -368,6 +378,7 @@ export default class ArxivPaperPlugin extends Plugin {
             model: DEFAULT_LLM_MODEL,
             apiKey: "",
         };
+        workspaceTokenInput.value = this.settings.workspaceApiToken ?? "";
         llmBaseInput.value = storedLlm.baseUrl ?? "";
         llmPathInput.value = storedLlm.apiPath || DEFAULT_LLM_PATH;
         llmModelInput.value = storedLlm.model || DEFAULT_LLM_MODEL;
@@ -502,6 +513,7 @@ export default class ArxivPaperPlugin extends Plugin {
                 return;
             }
 
+            await this.persistWorkspaceToken(workspaceTokenInput.value);
             await this.persistLlmConfig(llmConfig);
             await this.persistMineruConfig(mineruConfig);
             await this.handleInsert(
@@ -884,14 +896,19 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private getSiyuanApiToken(): string | null {
+        const storedToken = this.normalizeWorkspaceToken(this.settings.workspaceApiToken);
+        if (storedToken) {
+            return storedToken;
+        }
+
         const appWithConfig = this.app as unknown as {config?: {api?: {token?: string}}};
-        const directToken = appWithConfig?.config?.api?.token;
+        const directToken = this.normalizeWorkspaceToken(appWithConfig?.config?.api?.token);
         if (directToken) {
             return directToken;
         }
 
         const globalSiyuan = (globalThis as typeof globalThis & {siyuan?: {config?: {api?: {token?: string}}}}).siyuan;
-        const globalToken = globalSiyuan?.config?.api?.token;
+        const globalToken = this.normalizeWorkspaceToken(globalSiyuan?.config?.api?.token);
         if (globalToken) {
             return globalToken;
         }
@@ -903,7 +920,7 @@ export default class ArxivPaperPlugin extends Plugin {
             }
             const candidates = ["token", "api-token", "siyuan-token"];
             for (const key of candidates) {
-                const value = storage.getItem?.(key);
+                const value = this.normalizeWorkspaceToken(storage.getItem?.(key));
                 if (value) {
                     return value;
                 }
@@ -1046,6 +1063,21 @@ export default class ArxivPaperPlugin extends Plugin {
         input.autocapitalize = "off";
         input.setAttribute("autocorrect", "off");
         input.spellcheck = false;
+    }
+
+    private normalizeWorkspaceToken(token: string | null | undefined): string | null {
+        if (typeof token !== "string") {
+            return null;
+        }
+        const trimmed = token.trim();
+        if (!trimmed) {
+            return null;
+        }
+        const match = /^Token\s+(.+)$/i.exec(trimmed);
+        if (match?.[1]) {
+            return match[1].trim();
+        }
+        return trimmed;
     }
 
     private decodeBase64(data: string): Uint8Array {
@@ -1834,7 +1866,11 @@ export default class ArxivPaperPlugin extends Plugin {
             if (stored && typeof stored === "object") {
                 const llmConfig = (stored as Partial<PluginSettings>).llmConfig;
                 const mineruConfig = (stored as Partial<PluginSettings>).mineruConfig;
+                const workspaceApiToken = typeof (stored as Partial<PluginSettings>).workspaceApiToken === "string"
+                    ? (stored as Partial<PluginSettings>).workspaceApiToken
+                    : "";
                 this.settings = {
+                    workspaceApiToken: this.normalizeWorkspaceToken(workspaceApiToken) ?? "",
                     llmConfig: {
                         baseUrl: llmConfig?.baseUrl ?? "",
                         apiPath: llmConfig?.apiPath || DEFAULT_LLM_PATH,
@@ -1858,6 +1894,7 @@ export default class ArxivPaperPlugin extends Plugin {
             console.warn("ArxivPaperPlugin: failed to load settings", err);
         }
         this.settings = {
+            workspaceApiToken: "",
             llmConfig: {
                 baseUrl: "",
                 apiPath: DEFAULT_LLM_PATH,
@@ -1875,6 +1912,19 @@ export default class ArxivPaperPlugin extends Plugin {
                 modelVersion: "",
             },
         };
+    }
+
+    private async persistWorkspaceToken(token: string) {
+        const normalized = this.normalizeWorkspaceToken(token) ?? "";
+        if (this.settings.workspaceApiToken === normalized) {
+            return;
+        }
+        this.settings.workspaceApiToken = normalized;
+        try {
+            await this.saveData("settings", this.settings);
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: failed to save workspace API token", err);
+        }
     }
 
     private async persistLlmConfig(config: LlmConfig) {

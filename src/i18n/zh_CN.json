@@ -26,6 +26,8 @@
   "errorBrowserDirectFallback": "浏览器直接下载失败：${detail}。",
   "parseFullTextLabel": "解析全文",
   "omitReferencesLabel": "去掉参考文献",
+  "workspaceTokenLabel": "思源 API 令牌",
+  "workspaceTokenPlaceholder": "可选：粘贴工作空间令牌",
   "successParsedMessage": "已插入 ${title} 的解析内容",
   "statusFetchingHtml": "正在获取 HTML 渲染...",
   "statusConvertingHtml": "正在转换为 Markdown...",

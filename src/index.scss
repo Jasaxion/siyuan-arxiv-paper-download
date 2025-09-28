@@ -40,18 +40,16 @@
     gap: 8px;
   }
 
-  &__llm-config {
+  &__llm-config,
+  &__mineru-config {
     display: flex;
     flex-direction: column;
     gap: 8px;
     padding-left: 34px;
   }
 
-  &__mineru-config {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-left: 34px;
+  &__config--collapsed {
+    display: none !important;
   }
 
   &__mineru-options {

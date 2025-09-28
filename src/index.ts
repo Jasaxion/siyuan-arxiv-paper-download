@@ -98,12 +98,25 @@ interface MarkdownConversionResult {
 interface ForwardProxyResponse {
     code: number;
     msg?: string;
-    data?: {
-        status: number;
-        contentType?: string;
-        body?: string;
-        bodyEncoding?: string;
-    };
+    data?: ForwardProxyData;
+}
+
+interface ForwardProxyData {
+    status: number;
+    contentType?: string;
+    body?: string;
+    bodyEncoding?: string;
+}
+
+interface ForwardProxyPayload {
+    url: string;
+    method: string;
+    timeout?: number;
+    headers?: Array<Record<string, string>>;
+    contentType?: string;
+    payload?: string;
+    payloadEncoding?: string;
+    responseEncoding?: string;
 }
 
 interface MineruTaskCreateResponse {
@@ -203,43 +216,43 @@ export default class ArxivPaperPlugin extends Plugin {
     <input class="b3-text-field fn__block siyuan-arxiv-dialog__input" placeholder="${this.i18n.inputPlaceholder}" />
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__parse" />${this.i18n.parseFullTextLabel}</label>
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__omit-references" disabled />${this.i18n.omitReferencesLabel}</label>
-    <div class="siyuan-arxiv-dialog__group">
-        <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-toggle" disabled />${this.i18n.llmToggleLabel}</label>
-        <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-full-input" disabled />${this.i18n.llmFullInputLabel}</label>
-        <div class="siyuan-arxiv-dialog__llm-config">
-            <label class="siyuan-arxiv-dialog__field">
-                <span class="siyuan-arxiv-dialog__label">${this.i18n.llmBaseUrlLabel}</span>
-                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-base" placeholder="${this.i18n.llmBaseUrlPlaceholder}" disabled />
-            </label>
-            <label class="siyuan-arxiv-dialog__field">
+        <div class="siyuan-arxiv-dialog__group">
+            <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-toggle" disabled />${this.i18n.llmToggleLabel}</label>
+            <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-full-input" disabled />${this.i18n.llmFullInputLabel}</label>
+            <div class="siyuan-arxiv-dialog__llm-config">
+                <label class="siyuan-arxiv-dialog__field">
+                    <span class="siyuan-arxiv-dialog__label">${this.i18n.llmBaseUrlLabel}</span>
+                    <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-base" placeholder="${this.i18n.llmBaseUrlPlaceholder}" disabled />
+                </label>
+                <label class="siyuan-arxiv-dialog__field">
                 <span class="siyuan-arxiv-dialog__label">${this.i18n.llmApiPathLabel}</span>
                 <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-path" value="${DEFAULT_LLM_PATH}" placeholder="${this.i18n.llmApiPathPlaceholder}" disabled />
             </label>
             <label class="siyuan-arxiv-dialog__field">
                 <span class="siyuan-arxiv-dialog__label">${this.i18n.llmModelLabel}</span>
                 <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-model" value="${DEFAULT_LLM_MODEL}" placeholder="${this.i18n.llmModelPlaceholder}" disabled />
-            </label>
-            <label class="siyuan-arxiv-dialog__field">
-                <span class="siyuan-arxiv-dialog__label">${this.i18n.llmApiKeyLabel}</span>
-                <input type="password" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-key" placeholder="sk-********" autocomplete="off" disabled />
-            </label>
+                </label>
+                <label class="siyuan-arxiv-dialog__field">
+                    <span class="siyuan-arxiv-dialog__label">${this.i18n.llmApiKeyLabel}</span>
+                    <input type="password" maxlength="256" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__llm-key" placeholder="sk-********" autocomplete="off" disabled />
+                </label>
+            </div>
         </div>
-    </div>
-    <div class="siyuan-arxiv-dialog__group">
-        <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__mineru-toggle" disabled />${this.i18n.mineruToggleLabel}</label>
-        <div class="siyuan-arxiv-dialog__mineru-config">
-            <label class="siyuan-arxiv-dialog__field">
-                <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruBaseUrlLabel}</span>
-                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-base" value="${DEFAULT_MINERU_BASE_URL}" placeholder="${this.i18n.mineruBaseUrlPlaceholder}" disabled />
-            </label>
+        <div class="siyuan-arxiv-dialog__group">
+            <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__mineru-toggle" disabled />${this.i18n.mineruToggleLabel}</label>
+            <div class="siyuan-arxiv-dialog__mineru-config">
+                <label class="siyuan-arxiv-dialog__field">
+                    <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruBaseUrlLabel}</span>
+                    <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-base" value="${DEFAULT_MINERU_BASE_URL}" placeholder="${this.i18n.mineruBaseUrlPlaceholder}" disabled />
+                </label>
             <label class="siyuan-arxiv-dialog__field">
                 <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruApiPathLabel}</span>
                 <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-path" value="${DEFAULT_MINERU_PATH}" placeholder="${this.i18n.mineruApiPathPlaceholder}" disabled />
-            </label>
-            <label class="siyuan-arxiv-dialog__field">
-                <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruApiKeyLabel}</span>
-                <input type="password" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-key" placeholder="${this.i18n.mineruApiKeyPlaceholder}" autocomplete="off" disabled />
-            </label>
+                </label>
+                <label class="siyuan-arxiv-dialog__field">
+                    <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruApiKeyLabel}</span>
+                    <input type="password" maxlength="256" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-key" placeholder="${this.i18n.mineruApiKeyPlaceholder}" autocomplete="off" disabled />
+                </label>
             <label class="siyuan-arxiv-dialog__field">
                 <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruLanguageLabel}</span>
                 <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-language" placeholder="${this.i18n.mineruLanguagePlaceholder}" disabled />
@@ -272,11 +285,13 @@ export default class ArxivPaperPlugin extends Plugin {
         const omitReferencesCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__omit-references");
         const llmToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-toggle");
         const llmFullInputToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-full-input");
+        const llmConfigContainer = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-config");
         const llmBaseInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-base");
         const llmPathInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-path");
         const llmModelInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-model");
         const llmKeyInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-key");
         const mineruToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-toggle");
+        const mineruConfigContainer = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-config");
         const mineruBaseInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-base");
         const mineruPathInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-path");
         const mineruKeyInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-key");
@@ -294,11 +309,13 @@ export default class ArxivPaperPlugin extends Plugin {
             || !(omitReferencesCheckbox instanceof HTMLInputElement)
             || !(llmToggle instanceof HTMLInputElement)
             || !(llmFullInputToggle instanceof HTMLInputElement)
+            || !(llmConfigContainer instanceof HTMLElement)
             || !(llmBaseInput instanceof HTMLInputElement)
             || !(llmPathInput instanceof HTMLInputElement)
             || !(llmModelInput instanceof HTMLInputElement)
             || !(llmKeyInput instanceof HTMLInputElement)
             || !(mineruToggle instanceof HTMLInputElement)
+            || !(mineruConfigContainer instanceof HTMLElement)
             || !(mineruBaseInput instanceof HTMLInputElement)
             || !(mineruPathInput instanceof HTMLInputElement)
             || !(mineruKeyInput instanceof HTMLInputElement)
@@ -316,11 +333,13 @@ export default class ArxivPaperPlugin extends Plugin {
                 omitReferencesCheckbox,
                 llmToggle,
                 llmFullInputToggle,
+                llmConfigContainer,
                 llmBaseInput,
                 llmPathInput,
                 llmModelInput,
                 llmKeyInput,
                 mineruToggle,
+                mineruConfigContainer,
                 mineruBaseInput,
                 mineruPathInput,
                 mineruKeyInput,
@@ -396,6 +415,7 @@ export default class ArxivPaperPlugin extends Plugin {
             [llmBaseInput, llmPathInput, llmModelInput, llmKeyInput].forEach((field) => {
                 field.disabled = !llmEnabled;
             });
+            llmConfigContainer.classList.toggle("siyuan-arxiv-dialog__config--collapsed", !llmEnabled);
 
             const mineruEnabled = parseEnabled && mineruToggle.checked;
             [mineruBaseInput, mineruPathInput, mineruKeyInput, mineruLanguageInput, mineruModelInput].forEach((field) => {
@@ -404,6 +424,7 @@ export default class ArxivPaperPlugin extends Plugin {
             [mineruOcrToggle, mineruFormulaToggle, mineruTableToggle].forEach((toggle) => {
                 toggle.disabled = !mineruEnabled;
             });
+            mineruConfigContainer.classList.toggle("siyuan-arxiv-dialog__config--collapsed", !mineruEnabled);
         };
 
         parseCheckbox.addEventListener("change", () => {
@@ -680,8 +701,7 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private async downloadPdf(url: string): Promise<Blob> {
-        const frontend = getFrontend();
-        const isBrowserFrontend = frontend === "browser" || frontend === "browser-desktop" || frontend === "browser-mobile";
+        const isBrowserFrontend = this.isBrowserFrontend();
 
         let browserDirectError: string | null = null;
         if (isBrowserFrontend) {
@@ -770,39 +790,23 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private async downloadPdfViaProxy(url: string): Promise<Blob> {
-        const proxyRequest = {
+        const proxyRequest: ForwardProxyPayload = {
             url,
             method: "GET",
             timeout: 15000,
-            headers: [] as Array<Record<string, string>>,
-            contentType: "application/json",
-            payload: "",
-            payloadEncoding: "text",
+            headers: [],
             responseEncoding: "base64",
         };
 
-        const candidateEndpoints = [
-            "/api/network/forwardProxy",
-            "/api/system/proxy",
-        ];
-
-        const errorDetails: string[] = [];
-
-        for (const endpoint of candidateEndpoints) {
-            try {
-                return await this.requestProxyEndpoint(endpoint, proxyRequest);
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                errorDetails.push(`${endpoint}: ${message}`);
-            }
+        const result = await this.forwardProxyRequest(proxyRequest);
+        const bytes = this.ensureProxyBinary(result, this.i18n.errorDownloadPdf);
+        if (!bytes.byteLength) {
+            throw new Error(this.i18n.errorDownloadPdf);
         }
-
-        const detail = errorDetails.filter(Boolean).join("; ");
-        const baseMessage = this.i18n.errorProxyRequest;
-        throw new Error(detail ? `${baseMessage} (${detail})` : baseMessage);
+        return new Blob([bytes], {type: result.contentType || "application/pdf"});
     }
 
-    private async requestProxyEndpoint(endpoint: string, payload: Record<string, unknown>): Promise<Blob> {
+    private async requestProxyEndpoint(endpoint: string, payload: ForwardProxyPayload): Promise<ForwardProxyData> {
         let response: Response;
         try {
             response = await fetch(endpoint, {
@@ -829,35 +833,90 @@ export default class ArxivPaperPlugin extends Plugin {
             throw new Error(result.msg || this.i18n.errorProxyRequest);
         }
 
-        const {body, bodyEncoding, contentType, status} = result.data;
-        if (!body) {
-            throw new Error(this.i18n.errorProxyRequest);
+        const data = result.data;
+        if (!data) {
+            throw new Error(result.msg || this.i18n.errorProxyRequest);
         }
 
-        if (status < 200 || status >= 300) {
+        if (data.status < 200 || data.status >= 300) {
             let errorDetail = "";
-            if (bodyEncoding?.startsWith("base64")) {
-                try {
-                    const decoded = this.decodeBase64(body);
-                    errorDetail = new TextDecoder().decode(decoded).trim();
-                } catch (err) {
-                    console.warn("Failed to decode proxy error body", err);
+            if (data.body) {
+                const encoding = data.bodyEncoding?.toLowerCase() ?? "";
+                if (encoding.startsWith("base64")) {
+                    try {
+                        const decoded = this.decodeBase64(data.body);
+                        errorDetail = new TextDecoder().decode(decoded).trim();
+                    } catch (err) {
+                        console.warn("Failed to decode proxy error body", err);
+                    }
+                } else {
+                    errorDetail = data.body.trim();
                 }
             }
-            const statusMessage = this.i18n.errorProxyStatus.replace("${status}", String(status));
+            const statusMessage = this.i18n.errorProxyStatus.replace("${status}", String(data.status));
             throw new Error(errorDetail ? `${statusMessage} ${errorDetail}` : statusMessage);
         }
 
-        if (!bodyEncoding?.startsWith("base64")) {
-            throw new Error(this.i18n.errorProxyEncoding.replace("${encoding}", bodyEncoding ?? "unknown"));
+        return data;
+    }
+
+    private async forwardProxyRequest(payload: ForwardProxyPayload): Promise<ForwardProxyData> {
+        const candidateEndpoints = [
+            "/api/network/forwardProxy",
+            "/api/system/proxy",
+        ];
+
+        const errorDetails: string[] = [];
+        for (const endpoint of candidateEndpoints) {
+            try {
+                return await this.requestProxyEndpoint(endpoint, payload);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                errorDetails.push(`${endpoint}: ${message}`);
+            }
         }
 
-        const bytes = this.decodeBase64(body);
-        if (!bytes.byteLength) {
-            throw new Error(this.i18n.errorDownloadPdf);
-        }
+        const detail = errorDetails.filter(Boolean).join("; ");
+        const baseMessage = this.i18n.errorProxyRequest;
+        throw new Error(detail ? `${baseMessage} (${detail})` : baseMessage);
+    }
 
-        return new Blob([bytes], {type: contentType || "application/pdf"});
+    private ensureProxyBinary(result: ForwardProxyData, fallbackMessage: string): Uint8Array {
+        if (!result.body) {
+            throw new Error(fallbackMessage);
+        }
+        const encoding = result.bodyEncoding?.toLowerCase() ?? "";
+        if (!encoding.startsWith("base64")) {
+            throw new Error(this.i18n.errorProxyEncoding.replace("${encoding}", result.bodyEncoding ?? "unknown"));
+        }
+        return this.decodeBase64(result.body);
+    }
+
+    private decodeProxyText(result: ForwardProxyData, fallbackMessage: string): string {
+        const {body, bodyEncoding} = result;
+        if (body == null) {
+            throw new Error(fallbackMessage);
+        }
+        const encoding = bodyEncoding?.toLowerCase() ?? "";
+        if (!encoding || encoding === "text" || encoding === "utf-8") {
+            return body;
+        }
+        if (encoding.startsWith("base64")) {
+            try {
+                const decoded = this.decodeBase64(body);
+                return new TextDecoder().decode(decoded);
+            } catch (err) {
+                console.warn("Failed to decode proxy text body", err);
+                throw new Error(this.i18n.errorProxyEncoding.replace("${encoding}", bodyEncoding ?? "base64"));
+            }
+        }
+        throw new Error(this.i18n.errorProxyEncoding.replace("${encoding}", bodyEncoding ?? "unknown"));
+    }
+
+    private createProxyHeaders(headers: Record<string, string>): Array<Record<string, string>> {
+        return Object.entries(headers)
+            .filter(([, value]) => Boolean(value))
+            .map(([key, value]) => ({[key]: value}));
     }
 
     private decodeBase64(data: string): Uint8Array {
@@ -877,6 +936,11 @@ export default class ArxivPaperPlugin extends Plugin {
             bytes[i] = binary.charCodeAt(i);
         }
         return bytes;
+    }
+
+    private isBrowserFrontend(): boolean {
+        const frontend = getFrontend();
+        return frontend === "browser" || frontend === "browser-desktop" || frontend === "browser-mobile";
     }
 
     private buildPdfFileName(title: string, fallbackId: string): string {
@@ -1042,6 +1106,64 @@ export default class ArxivPaperPlugin extends Plugin {
         throw new Error(this.i18n.errorParseFullTextFailed);
     }
 
+    private async mineruRequestJson<T>(
+        url: string,
+        config: MineruConfig,
+        method: "GET" | "POST",
+        body?: Record<string, unknown>,
+        options?: {preferDirect?: boolean; onDirectFailure?: () => void},
+    ): Promise<T> {
+        const fallbackMessage = this.i18n.errorMineruRequest ?? "MinerU request failed.";
+        const headers = this.buildMineruHeaders(config, method);
+        const preferDirect = options?.preferDirect ?? false;
+        let serializedBody: string | undefined;
+        if (body && method !== "GET") {
+            serializedBody = JSON.stringify(body);
+        }
+
+        if (preferDirect) {
+            try {
+                const init: RequestInit = {
+                    method,
+                    headers,
+                };
+                if (serializedBody) {
+                    init.body = serializedBody;
+                }
+                const response = await fetch(url, init);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return (await response.json()) as T;
+            } catch (err) {
+                console.warn("ArxivPaperPlugin: MinerU direct request failed, falling back to proxy", err);
+                options?.onDirectFailure?.();
+            }
+        }
+
+        const proxyPayload: ForwardProxyPayload = {
+            url,
+            method,
+            timeout: method === "POST" ? 20000 : 15000,
+            headers: this.createProxyHeaders(headers),
+            responseEncoding: "text",
+        };
+        if (serializedBody) {
+            proxyPayload.payload = serializedBody;
+            proxyPayload.payloadEncoding = "text";
+            proxyPayload.contentType = "application/json";
+        }
+
+        const proxyResult = await this.forwardProxyRequest(proxyPayload);
+        const text = this.decodeProxyText(proxyResult, fallbackMessage);
+        try {
+            return JSON.parse(text) as T;
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: MinerU proxy JSON parse failed", err);
+            throw new Error(fallbackMessage);
+        }
+    }
+
     private async fetchMineruMarkdown(
         metadata: ArxivMetadata,
         statusElement: HTMLElement,
@@ -1063,29 +1185,20 @@ export default class ArxivPaperPlugin extends Plugin {
             payload.model_version = config.modelVersion;
         }
 
-        let response: Response;
-        try {
-            response = await fetch(endpoint, {
-                method: "POST",
-                headers: this.buildMineruHeaders(config),
-                body: JSON.stringify(payload),
-            });
-        } catch (err) {
-            console.error("ArxivPaperPlugin: MinerU create task request failed", err);
-            throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
-        }
-
-        if (!response.ok) {
-            throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
-        }
-
-        let result: MineruTaskCreateResponse;
-        try {
-            result = (await response.json()) as MineruTaskCreateResponse;
-        } catch (err) {
-            console.warn("ArxivPaperPlugin: MinerU create task response JSON parse failed", err);
-            throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
-        }
+        const preferDirect = !this.isBrowserFrontend();
+        let directFailed = false;
+        const result = await this.mineruRequestJson<MineruTaskCreateResponse>(
+            endpoint,
+            config,
+            "POST",
+            payload,
+            {
+                preferDirect,
+                onDirectFailure: () => {
+                    directFailed = true;
+                },
+            },
+        );
 
         if (result.code !== 0 || !result.data?.task_id) {
             const detail = result.msg?.trim();
@@ -1093,39 +1206,40 @@ export default class ArxivPaperPlugin extends Plugin {
         }
 
         statusElement.textContent = this.i18n.statusMineruQueued ?? "MinerU task queued...";
-        const markdown = await this.pollMineruTask(result.data.task_id, config, statusElement);
+        const markdown = await this.pollMineruTask(
+            result.data.task_id,
+            config,
+            statusElement,
+            preferDirect && !directFailed,
+        );
         if (!markdown.trim()) {
             throw new Error(this.i18n.errorMineruNoMarkdown ?? "MinerU did not return Markdown output.");
         }
         return markdown.trim();
     }
 
-    private async pollMineruTask(taskId: string, config: MineruConfig, statusElement: HTMLElement): Promise<string> {
+    private async pollMineruTask(
+        taskId: string,
+        config: MineruConfig,
+        statusElement: HTMLElement,
+        preferDirect: boolean,
+    ): Promise<string> {
         const statusEndpoint = this.buildMineruStatusEndpoint(config, taskId);
         const start = Date.now();
+        let allowDirect = preferDirect;
         while (Date.now() - start < MINERU_TIMEOUT_MS) {
-            let response: Response;
-            try {
-                response = await fetch(statusEndpoint, {
-                    method: "GET",
-                    headers: this.buildMineruHeaders(config),
-                });
-            } catch (err) {
-                console.error("ArxivPaperPlugin: MinerU poll request failed", err);
-                throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
-            }
-
-            if (!response.ok) {
-                throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
-            }
-
-            let payload: MineruTaskStatusResponse;
-            try {
-                payload = (await response.json()) as MineruTaskStatusResponse;
-            } catch (err) {
-                console.warn("ArxivPaperPlugin: MinerU poll response JSON parse failed", err);
-                throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
-            }
+            const payload = await this.mineruRequestJson<MineruTaskStatusResponse>(
+                statusEndpoint,
+                config,
+                "GET",
+                undefined,
+                {
+                    preferDirect: allowDirect,
+                    onDirectFailure: () => {
+                        allowDirect = false;
+                    },
+                },
+            );
 
             if (payload.code !== 0 || !payload.data) {
                 const detail = payload.msg?.trim();
@@ -1182,27 +1296,45 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private async downloadMineruArchive(url: string): Promise<string> {
-        let response: Response;
-        try {
-            response = await fetch(url, {
-                method: "GET",
-                headers: {Accept: "application/zip, application/octet-stream"},
-            });
-        } catch (err) {
-            console.error("ArxivPaperPlugin: MinerU archive download failed", err);
-            throw new Error(this.i18n.errorMineruResult ?? "Failed to download MinerU archive.");
+        const fallbackMessage = this.i18n.errorMineruResult ?? "Failed to download MinerU archive.";
+        if (!this.isBrowserFrontend()) {
+            try {
+                const response = await fetch(url, {
+                    method: "GET",
+                    headers: {Accept: "application/zip, application/octet-stream"},
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const buffer = await response.arrayBuffer();
+                if (buffer.byteLength) {
+                    const directMarkdown = this.extractMarkdownFromMineruArchive(new Uint8Array(buffer));
+                    if (directMarkdown) {
+                        return directMarkdown.trim();
+                    }
+                    console.warn("ArxivPaperPlugin: MinerU archive direct download returned no markdown, falling back to proxy");
+                } else {
+                    throw new Error("empty response body");
+                }
+            } catch (err) {
+                console.warn("ArxivPaperPlugin: MinerU archive direct download failed, falling back to proxy", err);
+            }
         }
 
-        if (!response.ok) {
-            throw new Error(this.i18n.errorMineruResult ?? "Failed to download MinerU archive.");
+        const proxyResult = await this.forwardProxyRequest({
+            url,
+            method: "GET",
+            timeout: 20000,
+            headers: this.createProxyHeaders({Accept: "application/zip, application/octet-stream"}),
+            responseEncoding: "base64",
+        });
+
+        const bytes = this.ensureProxyBinary(proxyResult, fallbackMessage);
+        if (!bytes.byteLength) {
+            throw new Error(fallbackMessage);
         }
 
-        const buffer = await response.arrayBuffer();
-        if (!buffer.byteLength) {
-            throw new Error(this.i18n.errorMineruResult ?? "Failed to download MinerU archive.");
-        }
-
-        const markdown = this.extractMarkdownFromMineruArchive(new Uint8Array(buffer));
+        const markdown = this.extractMarkdownFromMineruArchive(bytes);
         if (!markdown) {
             throw new Error(this.i18n.errorMineruNoMarkdown ?? "MinerU did not return Markdown output.");
         }
@@ -1290,11 +1422,13 @@ export default class ArxivPaperPlugin extends Plugin {
         return null;
     }
 
-    private buildMineruHeaders(config: MineruConfig): Record<string, string> {
+    private buildMineruHeaders(config: MineruConfig, method: "GET" | "POST"): Record<string, string> {
         const headers: Record<string, string> = {
-            "Content-Type": "application/json",
             Accept: "application/json",
         };
+        if (method !== "GET") {
+            headers["Content-Type"] = "application/json";
+        }
         if (config.apiKey) {
             headers.Authorization = `Bearer ${config.apiKey}`;
         }

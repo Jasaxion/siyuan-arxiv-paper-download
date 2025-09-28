@@ -20,5 +20,6 @@
   "errorUploadPdf": "Failed to upload the PDF to SiYuan.",
   "errorProxyRequest": "Failed to contact the proxy endpoint.",
   "errorProxyStatus": "Proxy returned HTTP ${status}.",
-  "errorProxyEncoding": "Proxy response encoding ${encoding} is not supported."
+  "errorProxyEncoding": "Proxy response encoding ${encoding} is not supported.",
+  "errorBrowserDirectFallback": "Direct browser download failed: ${detail}."
 }

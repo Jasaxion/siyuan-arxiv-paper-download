@@ -233,10 +233,80 @@ export default class ArxivPaperPlugin extends Plugin {
 
     private async downloadPdf(url: string): Promise<Blob> {
         const frontend = getFrontend();
-        if (frontend === "browser" || frontend === "browser-desktop" || frontend === "browser-mobile") {
-            return this.downloadPdfViaProxy(url);
+        const isBrowserFrontend = frontend === "browser" || frontend === "browser-desktop" || frontend === "browser-mobile";
+
+        let browserDirectError: string | null = null;
+        if (isBrowserFrontend) {
+            const directErrors: string[] = [];
+            const attemptDirectDownload = async (candidateUrl: string, label: string): Promise<Blob | null> => {
+                try {
+                    return await this.downloadPdfDirect(candidateUrl);
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    directErrors.push(`${label}: ${message}`);
+                    console.warn(`Failed to download PDF directly via ${label}`, error);
+                    return null;
+                }
+            };
+
+            const exportUrl = this.buildBrowserFriendlyPdfUrl(url);
+            if (exportUrl) {
+                const exportResult = await attemptDirectDownload(exportUrl, "export.arxiv.org");
+                if (exportResult) {
+                    return exportResult;
+                }
+            }
+
+            const originResult = await attemptDirectDownload(url, "arxiv.org");
+            if (originResult) {
+                return originResult;
+            }
+
+            if (directErrors.length) {
+                browserDirectError = directErrors.join("; ");
+            }
+
+            try {
+                return await this.downloadPdfViaProxy(url);
+            } catch (error) {
+                if (browserDirectError) {
+                    const detail = this.i18n.errorBrowserDirectFallback.replace("${detail}", browserDirectError);
+                    if (error instanceof Error) {
+                        error.message = `${error.message} ${detail}`;
+                    } else {
+                        throw new Error(`${String(error)} ${detail}`);
+                    }
+                }
+                throw error;
+            }
         }
+
         return this.downloadPdfDirect(url);
+    }
+
+    private buildBrowserFriendlyPdfUrl(url: string): string | null {
+        try {
+            const parsed = new URL(url);
+            if (!parsed.hostname.endsWith("arxiv.org")) {
+                return null;
+            }
+
+            const normalizedPath = parsed.pathname.replace(/\/+/g, "/");
+            if (!normalizedPath.startsWith("/pdf/")) {
+                return null;
+            }
+
+            const identifier = normalizedPath.slice("/pdf/".length).replace(/\.pdf$/i, "");
+            if (!identifier) {
+                return null;
+            }
+
+            const query = parsed.search ? parsed.search : "";
+            return `https://export.arxiv.org/pdf/${identifier}${query}`;
+        } catch (error) {
+            console.warn("Failed to build browser-friendly arXiv PDF URL", error);
+            return null;
+        }
     }
 
     private async downloadPdfDirect(url: string): Promise<Blob> {

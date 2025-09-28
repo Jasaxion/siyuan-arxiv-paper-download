@@ -17,5 +17,9 @@
   "errorNotFound": "The specified arXiv paper was not found.",
   "errorMissingTitle": "The paper title could not be determined.",
   "errorDownloadPdf": "Failed to download the PDF file.",
-  "errorUploadPdf": "Failed to upload the PDF to SiYuan."
+  "errorUploadPdf": "Failed to upload the PDF to SiYuan.",
+  "errorProxyRequest": "Failed to contact the proxy endpoint.",
+  "errorProxyStatus": "Proxy returned HTTP ${status}.",
+  "errorProxyEncoding": "Proxy response encoding ${encoding} is not supported.",
+  "errorBrowserDirectFallback": "Direct browser download failed: ${detail}."
 }

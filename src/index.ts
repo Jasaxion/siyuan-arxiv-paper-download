@@ -22,6 +22,17 @@ interface ReadDirResponse {
     }>;
 }
 
+interface ForwardProxyResponse {
+    code: number;
+    msg: string;
+    data?: {
+        body: string;
+        bodyEncoding?: string;
+        contentType?: string;
+        status: number;
+    };
+}
+
 export default class ArxivPaperPlugin extends Plugin {
     private isMobile = false;
 
@@ -221,6 +232,84 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private async downloadPdf(url: string): Promise<Blob> {
+        const frontend = getFrontend();
+        const isBrowserFrontend = frontend === "browser" || frontend === "browser-desktop" || frontend === "browser-mobile";
+
+        let browserDirectError: string | null = null;
+        if (isBrowserFrontend) {
+            const directErrors: string[] = [];
+            const attemptDirectDownload = async (candidateUrl: string, label: string): Promise<Blob | null> => {
+                try {
+                    return await this.downloadPdfDirect(candidateUrl);
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    directErrors.push(`${label}: ${message}`);
+                    console.warn(`Failed to download PDF directly via ${label}`, error);
+                    return null;
+                }
+            };
+
+            const exportUrl = this.buildBrowserFriendlyPdfUrl(url);
+            if (exportUrl) {
+                const exportResult = await attemptDirectDownload(exportUrl, "export.arxiv.org");
+                if (exportResult) {
+                    return exportResult;
+                }
+            }
+
+            const originResult = await attemptDirectDownload(url, "arxiv.org");
+            if (originResult) {
+                return originResult;
+            }
+
+            if (directErrors.length) {
+                browserDirectError = directErrors.join("; ");
+            }
+
+            try {
+                return await this.downloadPdfViaProxy(url);
+            } catch (error) {
+                if (browserDirectError) {
+                    const detail = this.i18n.errorBrowserDirectFallback.replace("${detail}", browserDirectError);
+                    if (error instanceof Error) {
+                        error.message = `${error.message} ${detail}`;
+                    } else {
+                        throw new Error(`${String(error)} ${detail}`);
+                    }
+                }
+                throw error;
+            }
+        }
+
+        return this.downloadPdfDirect(url);
+    }
+
+    private buildBrowserFriendlyPdfUrl(url: string): string | null {
+        try {
+            const parsed = new URL(url);
+            if (!parsed.hostname.endsWith("arxiv.org")) {
+                return null;
+            }
+
+            const normalizedPath = parsed.pathname.replace(/\/+/g, "/");
+            if (!normalizedPath.startsWith("/pdf/")) {
+                return null;
+            }
+
+            const identifier = normalizedPath.slice("/pdf/".length).replace(/\.pdf$/i, "");
+            if (!identifier) {
+                return null;
+            }
+
+            const query = parsed.search ? parsed.search : "";
+            return `https://export.arxiv.org/pdf/${identifier}${query}`;
+        } catch (error) {
+            console.warn("Failed to build browser-friendly arXiv PDF URL", error);
+            return null;
+        }
+    }
+
+    private async downloadPdfDirect(url: string): Promise<Blob> {
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(this.i18n.errorDownloadPdf);
@@ -230,6 +319,107 @@ export default class ArxivPaperPlugin extends Plugin {
             throw new Error(this.i18n.errorDownloadPdf);
         }
         return blob;
+    }
+
+    private async downloadPdfViaProxy(url: string): Promise<Blob> {
+        const proxyRequest = {
+            url,
+            method: "GET",
+            timeout: 15000,
+            headers: [] as Array<Record<string, string>>,
+            contentType: "application/json",
+            payload: "",
+            payloadEncoding: "text",
+            responseEncoding: "base64",
+        };
+
+        const candidateEndpoints = [
+            "/api/network/forwardProxy",
+            "/api/system/proxy",
+        ];
+
+        const errorDetails: string[] = [];
+
+        for (const endpoint of candidateEndpoints) {
+            try {
+                return await this.requestProxyEndpoint(endpoint, proxyRequest);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                errorDetails.push(`${endpoint}: ${message}`);
+            }
+        }
+
+        const detail = errorDetails.filter(Boolean).join("; ");
+        const baseMessage = this.i18n.errorProxyRequest;
+        throw new Error(detail ? `${baseMessage} (${detail})` : baseMessage);
+    }
+
+    private async requestProxyEndpoint(endpoint: string, payload: Record<string, unknown>): Promise<Blob> {
+        let response: Response;
+        try {
+            response = await fetch(endpoint, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(payload),
+            });
+        } catch (error) {
+            throw new Error(this.i18n.errorProxyRequest);
+        }
+
+        if (!response.ok) {
+            throw new Error(this.i18n.errorProxyStatus.replace("${status}", String(response.status)));
+        }
+
+        let result: ForwardProxyResponse;
+        try {
+            result = (await response.json()) as ForwardProxyResponse;
+        } catch (error) {
+            throw new Error(this.i18n.errorProxyRequest);
+        }
+
+        if (result.code !== 0 || !result.data) {
+            throw new Error(result.msg || this.i18n.errorProxyRequest);
+        }
+
+        const {body, bodyEncoding, contentType, status} = result.data;
+        if (!body) {
+            throw new Error(this.i18n.errorProxyRequest);
+        }
+
+        if (status < 200 || status >= 300) {
+            let errorDetail = "";
+            if (bodyEncoding?.startsWith("base64")) {
+                try {
+                    const decoded = this.decodeBase64(body);
+                    errorDetail = new TextDecoder().decode(decoded).trim();
+                } catch (err) {
+                    console.warn("Failed to decode proxy error body", err);
+                }
+            }
+            const statusMessage = this.i18n.errorProxyStatus.replace("${status}", String(status));
+            throw new Error(errorDetail ? `${statusMessage} ${errorDetail}` : statusMessage);
+        }
+
+        if (!bodyEncoding?.startsWith("base64")) {
+            throw new Error(this.i18n.errorProxyEncoding.replace("${encoding}", bodyEncoding ?? "unknown"));
+        }
+
+        const bytes = this.decodeBase64(body);
+        if (!bytes.byteLength) {
+            throw new Error(this.i18n.errorDownloadPdf);
+        }
+
+        return new Blob([bytes], {type: contentType || "application/pdf"});
+    }
+
+    private decodeBase64(data: string): Uint8Array {
+        const binary = atob(data);
+        const length = binary.length;
+        const bytes = new Uint8Array(length);
+        for (let i = 0; i < length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
     }
 
     private buildPdfFileName(title: string, fallbackId: string): string {

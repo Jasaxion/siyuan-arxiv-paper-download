@@ -1017,6 +1017,13 @@ export default class ArxivPaperPlugin extends Plugin {
             requestClone.responseEncoding = payload.responseEncoding;
         }
 
+        const siyuanToken = this.getSiyuanApiToken();
+        if (siyuanToken) {
+            body.token = siyuanToken;
+            requestClone.token = siyuanToken;
+            proxyRequest.token = siyuanToken;
+        }
+
         proxyRequest.req = requestClone;
 
         return {...body, ...proxyRequest};
@@ -1294,6 +1301,11 @@ export default class ArxivPaperPlugin extends Plugin {
         throw new Error(this.i18n.errorParseFullTextFailed);
     }
 
+    private shouldUseMineruDirectRequests(): boolean {
+        const frontend = getFrontend();
+        return frontend !== "browser" && frontend !== "browser-desktop" && frontend !== "browser-mobile";
+    }
+
     private async mineruRequestJson<T>(
         url: string,
         config: MineruConfig,
@@ -1303,7 +1315,7 @@ export default class ArxivPaperPlugin extends Plugin {
     ): Promise<T> {
         const fallbackMessage = this.i18n.errorMineruRequest ?? "MinerU request failed.";
         const headers = this.buildMineruHeaders(config, method);
-        const preferDirect = options?.preferDirect ?? true;
+        const preferDirect = options?.preferDirect ?? this.shouldUseMineruDirectRequests();
         let serializedBody: string | undefined;
         if (body && method !== "GET") {
             serializedBody = JSON.stringify(body);
@@ -1378,7 +1390,7 @@ export default class ArxivPaperPlugin extends Plugin {
             payload.model_version = config.modelVersion;
         }
 
-        const preferDirect = true;
+        const preferDirect = this.shouldUseMineruDirectRequests();
         let directFailed = false;
         const result = await this.mineruRequestJson<MineruTaskCreateResponse>(
             endpoint,
@@ -1491,26 +1503,28 @@ export default class ArxivPaperPlugin extends Plugin {
     private async downloadMineruArchive(url: string): Promise<string> {
         const fallbackMessage = this.i18n.errorMineruResult ?? "Failed to download MinerU archive.";
         let directFailure: Error | null = null;
-        try {
-            const response = await fetch(url, {
-                method: "GET",
-                headers: {Accept: "application/zip, application/octet-stream"},
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+        if (this.shouldUseMineruDirectRequests()) {
+            try {
+                const response = await fetch(url, {
+                    method: "GET",
+                    headers: {Accept: "application/zip, application/octet-stream"},
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const buffer = await response.arrayBuffer();
+                if (!buffer.byteLength) {
+                    throw new Error("empty response body");
+                }
+                const directMarkdown = this.extractMarkdownFromMineruArchive(new Uint8Array(buffer));
+                if (directMarkdown) {
+                    return directMarkdown.trim();
+                }
+                console.warn("ArxivPaperPlugin: MinerU archive direct download returned no markdown, falling back to proxy");
+            } catch (err) {
+                directFailure = err instanceof Error ? err : new Error(String(err));
+                console.warn("ArxivPaperPlugin: MinerU archive direct download failed, falling back to proxy", directFailure);
             }
-            const buffer = await response.arrayBuffer();
-            if (!buffer.byteLength) {
-                throw new Error("empty response body");
-            }
-            const directMarkdown = this.extractMarkdownFromMineruArchive(new Uint8Array(buffer));
-            if (directMarkdown) {
-                return directMarkdown.trim();
-            }
-            console.warn("ArxivPaperPlugin: MinerU archive direct download returned no markdown, falling back to proxy");
-        } catch (err) {
-            directFailure = err instanceof Error ? err : new Error(String(err));
-            console.warn("ArxivPaperPlugin: MinerU archive direct download failed, falling back to proxy", directFailure);
         }
 
         const proxyResult = await this.forwardProxyRequest({

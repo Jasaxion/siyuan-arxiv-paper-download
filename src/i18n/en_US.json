@@ -21,6 +21,7 @@
   "errorUploadPdf": "Failed to upload the PDF to SiYuan.",
   "errorProxyRequest": "Failed to contact the proxy endpoint.",
   "errorProxyStatus": "Proxy returned HTTP ${status}.",
+  "errorProxyUnauthorized": "Proxy returned HTTP ${status}. Please sign in to SiYuan or provide a valid API token.",
   "errorProxyEncoding": "Proxy response encoding ${encoding} is not supported.",
   "errorBrowserDirectFallback": "Direct browser download failed: ${detail}.",
   "parseFullTextLabel": "Parse full text",

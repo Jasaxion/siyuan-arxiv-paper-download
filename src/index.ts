@@ -816,17 +816,28 @@ export default class ArxivPaperPlugin extends Plugin {
 
     private async requestProxyEndpoint(endpoint: string, payload: ForwardProxyPayload): Promise<ForwardProxyData> {
         let response: Response;
+        const headers: Record<string, string> = {"Content-Type": "application/json"};
+        const siyuanToken = this.getSiyuanApiToken();
+        if (siyuanToken) {
+            headers.Authorization = `Token ${siyuanToken}`;
+        }
+
         try {
             response = await fetch(endpoint, {
                 method: "POST",
-                headers: {"Content-Type": "application/json"},
+                headers,
                 body: JSON.stringify(this.normalizeProxyPayload(payload)),
+                credentials: "include",
             });
         } catch (error) {
             throw new Error(this.i18n.errorProxyRequest);
         }
 
         if (!response.ok) {
+            if (response.status === 401) {
+                const unauthorized = this.i18n.errorProxyUnauthorized ?? this.i18n.errorProxyStatus;
+                throw new Error(unauthorized.replace("${status}", "401"));
+            }
             throw new Error(this.i18n.errorProxyStatus.replace("${status}", String(response.status)));
         }
 
@@ -847,6 +858,10 @@ export default class ArxivPaperPlugin extends Plugin {
         }
 
         if (data.status < 200 || data.status >= 300) {
+            if (data.status === 401) {
+                const unauthorized = this.i18n.errorProxyUnauthorized ?? this.i18n.errorProxyStatus;
+                throw new Error(unauthorized.replace("${status}", "401"));
+            }
             let errorDetail = "";
             if (data.body) {
                 const encoding = data.bodyEncoding?.toLowerCase() ?? "";
@@ -866,6 +881,38 @@ export default class ArxivPaperPlugin extends Plugin {
         }
 
         return data;
+    }
+
+    private getSiyuanApiToken(): string | null {
+        const appWithConfig = this.app as unknown as {config?: {api?: {token?: string}}};
+        const directToken = appWithConfig?.config?.api?.token;
+        if (directToken) {
+            return directToken;
+        }
+
+        const globalSiyuan = (globalThis as typeof globalThis & {siyuan?: {config?: {api?: {token?: string}}}}).siyuan;
+        const globalToken = globalSiyuan?.config?.api?.token;
+        if (globalToken) {
+            return globalToken;
+        }
+
+        try {
+            const storage = globalThis.localStorage;
+            if (!storage) {
+                return null;
+            }
+            const candidates = ["token", "api-token", "siyuan-token"];
+            for (const key of candidates) {
+                const value = storage.getItem?.(key);
+                if (value) {
+                    return value;
+                }
+            }
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: unable to read SiYuan API token from storage", err);
+        }
+
+        return null;
     }
 
     private normalizeProxyPayload(payload: ForwardProxyPayload): Record<string, unknown> {

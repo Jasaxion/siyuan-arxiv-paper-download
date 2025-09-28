@@ -1,4 +1,4 @@
-import {Dialog, Plugin, Protyle, showMessage, getFrontend} from "siyuan";
+import {Dialog, Plugin, Protyle, showMessage, getFrontend, fetchSyncPost} from "siyuan";
 import type {Lute} from "siyuan";
 import TurndownService from "turndown";
 import {gfm as turndownPluginGfm} from "turndown-plugin-gfm";
@@ -827,6 +827,25 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private async requestProxyEndpoint(endpoint: string, payload: ForwardProxyPayload): Promise<ForwardProxyData> {
+        const normalizedPayload = this.normalizeProxyPayload(payload);
+        const fallbackMessage = this.i18n.errorProxyRequest;
+        let websocketError: Error | null = null;
+
+        try {
+            const response = await fetchSyncPost(endpoint, normalizedPayload);
+            if (response.code !== 0) {
+                throw new Error(response.msg || fallbackMessage);
+            }
+            const parsed = this.parseForwardProxyResult(response.data, fallbackMessage);
+            if (parsed) {
+                return parsed;
+            }
+            throw new Error(fallbackMessage);
+        } catch (error) {
+            websocketError = error instanceof Error ? error : new Error(String(error));
+            console.warn("ArxivPaperPlugin: WebSocket forward proxy request failed, falling back to HTTP", websocketError);
+        }
+
         let response: Response;
         const headers: Record<string, string> = {"Content-Type": "application/json"};
         const siyuanToken = this.getSiyuanApiToken();
@@ -838,11 +857,12 @@ export default class ArxivPaperPlugin extends Plugin {
             response = await fetch(endpoint, {
                 method: "POST",
                 headers,
-                body: JSON.stringify(this.normalizeProxyPayload(payload)),
+                body: JSON.stringify(normalizedPayload),
                 credentials: "include",
             });
         } catch (error) {
-            throw new Error(this.i18n.errorProxyRequest);
+            const detail = websocketError?.message;
+            throw new Error(detail ? `${fallbackMessage} (${detail})` : fallbackMessage);
         }
 
         if (!response.ok) {
@@ -857,18 +877,14 @@ export default class ArxivPaperPlugin extends Plugin {
         try {
             result = (await response.json()) as ForwardProxyResponse;
         } catch (error) {
-            throw new Error(this.i18n.errorProxyRequest);
+            throw new Error(fallbackMessage);
         }
 
         if (result.code !== 0 || !result.data) {
-            throw new Error(result.msg || this.i18n.errorProxyRequest);
+            throw new Error(result.msg || fallbackMessage);
         }
 
         const data = result.data;
-        if (!data) {
-            throw new Error(result.msg || this.i18n.errorProxyRequest);
-        }
-
         if (data.status < 200 || data.status >= 300) {
             if (data.status === 401) {
                 const unauthorized = this.i18n.errorProxyUnauthorized ?? this.i18n.errorProxyStatus;
@@ -893,6 +909,27 @@ export default class ArxivPaperPlugin extends Plugin {
         }
 
         return data;
+    }
+
+    private parseForwardProxyResult(candidate: unknown, fallbackMessage: string): ForwardProxyData | null {
+        if (!candidate || typeof candidate !== "object") {
+            return null;
+        }
+
+        const record = candidate as Record<string, unknown>;
+        if (typeof record.status === "number") {
+            return candidate as ForwardProxyData;
+        }
+
+        if (typeof record.code === "number") {
+            const nested = candidate as ForwardProxyResponse;
+            if (nested.code !== 0 || !nested.data) {
+                throw new Error(nested.msg || fallbackMessage);
+            }
+            return nested.data;
+        }
+
+        return null;
     }
 
     private getSiyuanApiToken(): string | null {

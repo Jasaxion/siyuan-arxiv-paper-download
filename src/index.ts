@@ -252,21 +252,61 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private async downloadPdfViaProxy(url: string): Promise<Blob> {
-        const response = await fetch("/api/network/forwardProxy", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-                url,
-                method: "GET",
-                responseEncoding: "base64",
-            }),
-        });
+        const proxyRequest = {
+            url,
+            method: "GET",
+            timeout: 15000,
+            headers: [] as Array<Record<string, string>>,
+            contentType: "application/json",
+            payload: "",
+            payloadEncoding: "text",
+            responseEncoding: "base64",
+        };
 
-        if (!response.ok) {
+        const candidateEndpoints = [
+            "/api/network/forwardProxy",
+            "/api/system/proxy",
+        ];
+
+        const errorDetails: string[] = [];
+
+        for (const endpoint of candidateEndpoints) {
+            try {
+                return await this.requestProxyEndpoint(endpoint, proxyRequest);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                errorDetails.push(`${endpoint}: ${message}`);
+            }
+        }
+
+        const detail = errorDetails.filter(Boolean).join("; ");
+        const baseMessage = this.i18n.errorProxyRequest;
+        throw new Error(detail ? `${baseMessage} (${detail})` : baseMessage);
+    }
+
+    private async requestProxyEndpoint(endpoint: string, payload: Record<string, unknown>): Promise<Blob> {
+        let response: Response;
+        try {
+            response = await fetch(endpoint, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(payload),
+            });
+        } catch (error) {
             throw new Error(this.i18n.errorProxyRequest);
         }
 
-        const result = (await response.json()) as ForwardProxyResponse;
+        if (!response.ok) {
+            throw new Error(this.i18n.errorProxyStatus.replace("${status}", String(response.status)));
+        }
+
+        let result: ForwardProxyResponse;
+        try {
+            result = (await response.json()) as ForwardProxyResponse;
+        } catch (error) {
+            throw new Error(this.i18n.errorProxyRequest);
+        }
+
         if (result.code !== 0 || !result.data) {
             throw new Error(result.msg || this.i18n.errorProxyRequest);
         }

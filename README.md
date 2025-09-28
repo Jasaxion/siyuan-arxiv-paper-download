@@ -10,6 +10,11 @@ Repository: https://github.com/Jasaxion/siyuan-arxiv-paper-download
 
 Having issues? --> https://github.com/Jasaxion/siyuan-arxiv-paper-download/issues
 
+## Changelog  
+
+- 2025-09-28: Fixed CORS cross-origin access errors caused by file downloads in SiYuan Notes under Docker  
+- 2025-09-27: Implemented downloading documents from Arxiv and inserting them into SiYuan Notes
+
 ## Features
 
 - Adds a `/` command named **Insert arXiv paper**.

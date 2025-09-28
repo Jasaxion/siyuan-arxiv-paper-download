@@ -223,10 +223,6 @@ export default class ArxivPaperPlugin extends Plugin {
     <input class="b3-text-field fn__block siyuan-arxiv-dialog__input" placeholder="${this.i18n.inputPlaceholder}" />
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__parse" />${this.i18n.parseFullTextLabel}</label>
     <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__omit-references" disabled />${this.i18n.omitReferencesLabel}</label>
-    <label class="siyuan-arxiv-dialog__field siyuan-arxiv-dialog__field--token">
-        <span class="siyuan-arxiv-dialog__label">${this.i18n.workspaceTokenLabel}</span>
-        <input type="password" maxlength="256" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__workspace-token" placeholder="${this.i18n.workspaceTokenPlaceholder}" autocomplete="off" />
-    </label>
         <div class="siyuan-arxiv-dialog__group">
             <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-toggle" disabled />${this.i18n.llmToggleLabel}</label>
             <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__llm-full-input" disabled />${this.i18n.llmFullInputLabel}</label>
@@ -294,7 +290,6 @@ export default class ArxivPaperPlugin extends Plugin {
         const statusElement = dialog.element.querySelector(".siyuan-arxiv-dialog__status");
         const parseCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__parse");
         const omitReferencesCheckbox = dialog.element.querySelector(".siyuan-arxiv-dialog__omit-references");
-        const workspaceTokenInput = dialog.element.querySelector(".siyuan-arxiv-dialog__workspace-token");
         const llmToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-toggle");
         const llmFullInputToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-full-input");
         const llmConfigContainer = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-config");
@@ -319,7 +314,6 @@ export default class ArxivPaperPlugin extends Plugin {
             || !(statusElement instanceof HTMLElement)
             || !(parseCheckbox instanceof HTMLInputElement)
             || !(omitReferencesCheckbox instanceof HTMLInputElement)
-            || !(workspaceTokenInput instanceof HTMLInputElement)
             || !(llmToggle instanceof HTMLInputElement)
             || !(llmFullInputToggle instanceof HTMLInputElement)
             || !(llmConfigContainer instanceof HTMLElement)
@@ -344,7 +338,6 @@ export default class ArxivPaperPlugin extends Plugin {
                 statusElement,
                 parseCheckbox,
                 omitReferencesCheckbox,
-                workspaceTokenInput,
                 llmToggle,
                 llmFullInputToggle,
                 llmConfigContainer,
@@ -370,7 +363,6 @@ export default class ArxivPaperPlugin extends Plugin {
 
         this.suppressPasswordPrompts(llmKeyInput);
         this.suppressPasswordPrompts(mineruKeyInput);
-        this.suppressPasswordPrompts(workspaceTokenInput);
 
         const storedLlm = this.settings.llmConfig ?? {
             baseUrl: "",
@@ -378,7 +370,6 @@ export default class ArxivPaperPlugin extends Plugin {
             model: DEFAULT_LLM_MODEL,
             apiKey: "",
         };
-        workspaceTokenInput.value = this.settings.workspaceApiToken ?? "";
         llmBaseInput.value = storedLlm.baseUrl ?? "";
         llmPathInput.value = storedLlm.apiPath || DEFAULT_LLM_PATH;
         llmModelInput.value = storedLlm.model || DEFAULT_LLM_MODEL;
@@ -513,7 +504,6 @@ export default class ArxivPaperPlugin extends Plugin {
                 return;
             }
 
-            await this.persistWorkspaceToken(workspaceTokenInput.value);
             await this.persistLlmConfig(llmConfig);
             await this.persistMineruConfig(mineruConfig);
             await this.handleInsert(
@@ -1313,7 +1303,7 @@ export default class ArxivPaperPlugin extends Plugin {
     ): Promise<T> {
         const fallbackMessage = this.i18n.errorMineruRequest ?? "MinerU request failed.";
         const headers = this.buildMineruHeaders(config, method);
-        const preferDirect = options?.preferDirect ?? false;
+        const preferDirect = options?.preferDirect ?? true;
         let serializedBody: string | undefined;
         if (body && method !== "GET") {
             serializedBody = JSON.stringify(body);
@@ -1354,11 +1344,16 @@ export default class ArxivPaperPlugin extends Plugin {
 
         const proxyResult = await this.forwardProxyRequest(proxyPayload);
         const text = this.decodeProxyText(proxyResult, fallbackMessage);
+        const trimmed = text.trim();
+        if (!trimmed) {
+            throw new Error(fallbackMessage);
+        }
         try {
-            return JSON.parse(text) as T;
+            return JSON.parse(trimmed) as T;
         } catch (err) {
             console.warn("ArxivPaperPlugin: MinerU proxy JSON parse failed", err);
-            throw new Error(fallbackMessage);
+            const detail = trimmed.length > 160 ? `${trimmed.slice(0, 160)}…` : trimmed;
+            throw new Error(`${fallbackMessage} (${detail})`);
         }
     }
 
@@ -1383,7 +1378,7 @@ export default class ArxivPaperPlugin extends Plugin {
             payload.model_version = config.modelVersion;
         }
 
-        const preferDirect = !this.isBrowserFrontend();
+        const preferDirect = true;
         let directFailed = false;
         const result = await this.mineruRequestJson<MineruTaskCreateResponse>(
             endpoint,
@@ -1495,28 +1490,27 @@ export default class ArxivPaperPlugin extends Plugin {
 
     private async downloadMineruArchive(url: string): Promise<string> {
         const fallbackMessage = this.i18n.errorMineruResult ?? "Failed to download MinerU archive.";
-        if (!this.isBrowserFrontend()) {
-            try {
-                const response = await fetch(url, {
-                    method: "GET",
-                    headers: {Accept: "application/zip, application/octet-stream"},
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                const buffer = await response.arrayBuffer();
-                if (buffer.byteLength) {
-                    const directMarkdown = this.extractMarkdownFromMineruArchive(new Uint8Array(buffer));
-                    if (directMarkdown) {
-                        return directMarkdown.trim();
-                    }
-                    console.warn("ArxivPaperPlugin: MinerU archive direct download returned no markdown, falling back to proxy");
-                } else {
-                    throw new Error("empty response body");
-                }
-            } catch (err) {
-                console.warn("ArxivPaperPlugin: MinerU archive direct download failed, falling back to proxy", err);
+        let directFailure: Error | null = null;
+        try {
+            const response = await fetch(url, {
+                method: "GET",
+                headers: {Accept: "application/zip, application/octet-stream"},
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
             }
+            const buffer = await response.arrayBuffer();
+            if (!buffer.byteLength) {
+                throw new Error("empty response body");
+            }
+            const directMarkdown = this.extractMarkdownFromMineruArchive(new Uint8Array(buffer));
+            if (directMarkdown) {
+                return directMarkdown.trim();
+            }
+            console.warn("ArxivPaperPlugin: MinerU archive direct download returned no markdown, falling back to proxy");
+        } catch (err) {
+            directFailure = err instanceof Error ? err : new Error(String(err));
+            console.warn("ArxivPaperPlugin: MinerU archive direct download failed, falling back to proxy", directFailure);
         }
 
         const proxyResult = await this.forwardProxyRequest({
@@ -1529,11 +1523,18 @@ export default class ArxivPaperPlugin extends Plugin {
 
         const bytes = this.ensureProxyBinary(proxyResult, fallbackMessage);
         if (!bytes.byteLength) {
+            if (directFailure) {
+                throw new Error(`${fallbackMessage} (${directFailure.message})`);
+            }
             throw new Error(fallbackMessage);
         }
 
         const markdown = this.extractMarkdownFromMineruArchive(bytes);
         if (!markdown) {
+            const detail = directFailure?.message;
+            if (detail) {
+                throw new Error(`${this.i18n.errorMineruNoMarkdown ?? "MinerU did not return Markdown output."} (${detail})`);
+            }
             throw new Error(this.i18n.errorMineruNoMarkdown ?? "MinerU did not return Markdown output.");
         }
         return markdown.trim();
@@ -1949,19 +1950,6 @@ export default class ArxivPaperPlugin extends Plugin {
                 modelVersion: "",
             },
         };
-    }
-
-    private async persistWorkspaceToken(token: string) {
-        const normalized = this.normalizeWorkspaceToken(token) ?? "";
-        if (this.settings.workspaceApiToken === normalized) {
-            return;
-        }
-        this.settings.workspaceApiToken = normalized;
-        try {
-            await this.saveData("settings", this.settings);
-        } catch (err) {
-            console.warn("ArxivPaperPlugin: failed to save workspace API token", err);
-        }
     }
 
     private async persistLlmConfig(config: LlmConfig) {

@@ -26,8 +26,6 @@
   "errorBrowserDirectFallback": "Direct browser download failed: ${detail}.",
   "parseFullTextLabel": "Parse full text",
   "omitReferencesLabel": "Omit references",
-  "workspaceTokenLabel": "SiYuan API token",
-  "workspaceTokenPlaceholder": "Paste workspace token (optional)",
   "successParsedMessage": "Inserted parsed content for ${title}",
   "statusFetchingHtml": "Fetching HTML rendering...",
   "statusConvertingHtml": "Converting HTML to Markdown...",

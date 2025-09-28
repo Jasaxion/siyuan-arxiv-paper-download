@@ -59,8 +59,6 @@ interface LlmContextOptions {
 
 interface MineruConfig {
     enabled: boolean;
-    baseUrl: string;
-    apiPath: string;
     apiKey: string;
     language: string;
     enableFormula: boolean;
@@ -78,8 +76,6 @@ interface PluginSettings {
         apiKey: string;
     };
     mineruConfig: {
-        baseUrl: string;
-        apiPath: string;
         apiKey: string;
         language: string;
         enableFormula: boolean;
@@ -177,8 +173,6 @@ export default class ArxivPaperPlugin extends Plugin {
             apiKey: "",
         },
         mineruConfig: {
-            baseUrl: DEFAULT_MINERU_BASE_URL,
-            apiPath: DEFAULT_MINERU_PATH,
             apiKey: "",
             language: "",
             enableFormula: true,
@@ -249,14 +243,6 @@ export default class ArxivPaperPlugin extends Plugin {
             <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__mineru-toggle" disabled />${this.i18n.mineruToggleLabel}</label>
             <div class="siyuan-arxiv-dialog__mineru-config">
                 <label class="siyuan-arxiv-dialog__field">
-                    <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruBaseUrlLabel}</span>
-                    <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-base" value="${DEFAULT_MINERU_BASE_URL}" placeholder="${this.i18n.mineruBaseUrlPlaceholder}" disabled />
-                </label>
-            <label class="siyuan-arxiv-dialog__field">
-                <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruApiPathLabel}</span>
-                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-path" value="${DEFAULT_MINERU_PATH}" placeholder="${this.i18n.mineruApiPathPlaceholder}" disabled />
-                </label>
-                <label class="siyuan-arxiv-dialog__field">
                     <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruApiKeyLabel}</span>
                     <input type="password" maxlength="256" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-key" placeholder="${this.i18n.mineruApiKeyPlaceholder}" autocomplete="off" disabled />
                 </label>
@@ -299,8 +285,6 @@ export default class ArxivPaperPlugin extends Plugin {
         const llmKeyInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-key");
         const mineruToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-toggle");
         const mineruConfigContainer = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-config");
-        const mineruBaseInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-base");
-        const mineruPathInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-path");
         const mineruKeyInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-key");
         const mineruLanguageInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-language");
         const mineruModelInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-model");
@@ -323,8 +307,6 @@ export default class ArxivPaperPlugin extends Plugin {
             || !(llmKeyInput instanceof HTMLInputElement)
             || !(mineruToggle instanceof HTMLInputElement)
             || !(mineruConfigContainer instanceof HTMLElement)
-            || !(mineruBaseInput instanceof HTMLInputElement)
-            || !(mineruPathInput instanceof HTMLInputElement)
             || !(mineruKeyInput instanceof HTMLInputElement)
             || !(mineruLanguageInput instanceof HTMLInputElement)
             || !(mineruModelInput instanceof HTMLInputElement)
@@ -347,8 +329,6 @@ export default class ArxivPaperPlugin extends Plugin {
                 llmKeyInput,
                 mineruToggle,
                 mineruConfigContainer,
-                mineruBaseInput,
-                mineruPathInput,
                 mineruKeyInput,
                 mineruLanguageInput,
                 mineruModelInput,
@@ -375,8 +355,6 @@ export default class ArxivPaperPlugin extends Plugin {
         llmModelInput.value = storedLlm.model || DEFAULT_LLM_MODEL;
         llmKeyInput.value = storedLlm.apiKey ?? "";
         const storedMineru = this.settings.mineruConfig ?? {
-            baseUrl: DEFAULT_MINERU_BASE_URL,
-            apiPath: DEFAULT_MINERU_PATH,
             apiKey: "",
             language: "",
             enableFormula: true,
@@ -384,8 +362,7 @@ export default class ArxivPaperPlugin extends Plugin {
             isOcr: false,
             modelVersion: "",
         };
-        mineruBaseInput.value = storedMineru.baseUrl || DEFAULT_MINERU_BASE_URL;
-        mineruPathInput.value = storedMineru.apiPath || DEFAULT_MINERU_PATH;
+        storedMineru.apiKey = this.normalizeMineruToken(storedMineru.apiKey);
         mineruKeyInput.value = storedMineru.apiKey ?? "";
         mineruLanguageInput.value = storedMineru.language ?? "";
         mineruModelInput.value = storedMineru.modelVersion ?? "";
@@ -428,7 +405,7 @@ export default class ArxivPaperPlugin extends Plugin {
             llmConfigContainer.classList.toggle("siyuan-arxiv-dialog__config--collapsed", !llmEnabled);
 
             const mineruEnabled = parseEnabled && mineruToggle.checked;
-            [mineruBaseInput, mineruPathInput, mineruKeyInput, mineruLanguageInput, mineruModelInput].forEach((field) => {
+            [mineruKeyInput, mineruLanguageInput, mineruModelInput].forEach((field) => {
                 field.disabled = !mineruEnabled;
             });
             [mineruOcrToggle, mineruFormulaToggle, mineruTableToggle].forEach((toggle) => {
@@ -476,9 +453,7 @@ export default class ArxivPaperPlugin extends Plugin {
 
             const mineruConfig: MineruConfig = {
                 enabled: parseCheckbox.checked && mineruToggle.checked,
-                baseUrl: mineruBaseInput.value.trim() || DEFAULT_MINERU_BASE_URL,
-                apiPath: mineruPathInput.value.trim() || DEFAULT_MINERU_PATH,
-                apiKey: mineruKeyInput.value.trim(),
+                apiKey: this.normalizeMineruToken(mineruKeyInput.value),
                 language: mineruLanguageInput.value.trim(),
                 enableFormula: mineruFormulaToggle.checked,
                 enableTable: mineruTableToggle.checked,
@@ -498,7 +473,7 @@ export default class ArxivPaperPlugin extends Plugin {
                 return;
             }
 
-            if (mineruConfig.enabled && (!mineruConfig.baseUrl || !mineruConfig.apiPath || !mineruConfig.apiKey)) {
+            if (mineruConfig.enabled && !mineruConfig.apiKey) {
                 statusElement.textContent = this.i18n.errorMineruConfig ?? "Invalid MinerU configuration.";
                 statusElement.classList.add("siyuan-arxiv-dialog__status--error");
                 return;
@@ -1114,6 +1089,21 @@ export default class ArxivPaperPlugin extends Plugin {
         return trimmed;
     }
 
+    private normalizeMineruToken(token: string | null | undefined): string {
+        if (typeof token !== "string") {
+            return "";
+        }
+        const trimmed = token.trim();
+        if (!trimmed) {
+            return "";
+        }
+        const match = /^Bearer\s+(.+)$/i.exec(trimmed);
+        if (match?.[1]) {
+            return match[1].trim();
+        }
+        return trimmed;
+    }
+
     private decodeBase64(data: string): Uint8Array {
         let binary: string;
         if (typeof globalThis.atob === "function") {
@@ -1374,7 +1364,7 @@ export default class ArxivPaperPlugin extends Plugin {
         statusElement: HTMLElement,
         config: MineruConfig,
     ): Promise<string> {
-        const endpoint = this.resolveMineruEndpoint(config, config.apiPath);
+        const endpoint = this.resolveMineruEndpoint();
         const payload: Record<string, unknown> = {
             url: metadata.pdfUrl,
             enable_formula: config.enableFormula,
@@ -1429,7 +1419,7 @@ export default class ArxivPaperPlugin extends Plugin {
         statusElement: HTMLElement,
         preferDirect: boolean,
     ): Promise<string> {
-        const statusEndpoint = this.buildMineruStatusEndpoint(config, taskId);
+        const statusEndpoint = this.buildMineruStatusEndpoint(taskId);
         const start = Date.now();
         let allowDirect = preferDirect;
         while (Date.now() - start < MINERU_TIMEOUT_MS) {
@@ -1648,24 +1638,19 @@ export default class ArxivPaperPlugin extends Plugin {
         return headers;
     }
 
-    private resolveMineruEndpoint(config: MineruConfig, path?: string): string {
-        const requestedPath = (path ?? config.apiPath ?? "").trim() || DEFAULT_MINERU_PATH;
+    private resolveMineruEndpoint(path?: string): string {
+        const requestedPath = (path ?? DEFAULT_MINERU_PATH).trim() || DEFAULT_MINERU_PATH;
         if (/^https?:\/\//i.test(requestedPath)) {
             return requestedPath;
         }
-        const base = (config.baseUrl || DEFAULT_MINERU_BASE_URL).trim();
-        const normalizedBase = base.replace(/\/+$/, "");
+        const normalizedBase = DEFAULT_MINERU_BASE_URL.replace(/\/+$/, "");
         const normalizedPath = requestedPath.startsWith("/") ? requestedPath : `/${requestedPath}`;
         return `${normalizedBase}${normalizedPath}`;
     }
 
-    private buildMineruStatusEndpoint(config: MineruConfig, taskId: string): string {
-        const basePath = (config.apiPath ?? "").trim() || DEFAULT_MINERU_PATH;
-        if (/^https?:\/\//i.test(basePath)) {
-            return `${basePath.replace(/\/+$/, "")}/${encodeURIComponent(taskId)}`;
-        }
-        const normalizedPath = `${basePath.replace(/\/+$/, "")}/${encodeURIComponent(taskId)}`;
-        return this.resolveMineruEndpoint(config, normalizedPath);
+    private buildMineruStatusEndpoint(taskId: string): string {
+        const normalizedPath = `${DEFAULT_MINERU_PATH.replace(/\/+$/, "")}/${encodeURIComponent(taskId)}`;
+        return this.resolveMineruEndpoint(normalizedPath);
     }
 
     private async delay(ms: number): Promise<void> {
@@ -1930,9 +1915,7 @@ export default class ArxivPaperPlugin extends Plugin {
                         apiKey: llmConfig?.apiKey ?? "",
                     },
                     mineruConfig: {
-                        baseUrl: mineruConfig?.baseUrl ?? DEFAULT_MINERU_BASE_URL,
-                        apiPath: mineruConfig?.apiPath || DEFAULT_MINERU_PATH,
-                        apiKey: mineruConfig?.apiKey ?? "",
+                        apiKey: this.normalizeMineruToken(mineruConfig?.apiKey),
                         language: mineruConfig?.language ?? "",
                         enableFormula: mineruConfig?.enableFormula !== false,
                         enableTable: mineruConfig?.enableTable !== false,
@@ -1954,8 +1937,6 @@ export default class ArxivPaperPlugin extends Plugin {
                 apiKey: "",
             },
             mineruConfig: {
-                baseUrl: DEFAULT_MINERU_BASE_URL,
-                apiPath: DEFAULT_MINERU_PATH,
                 apiKey: "",
                 language: "",
                 enableFormula: true,
@@ -1987,9 +1968,7 @@ export default class ArxivPaperPlugin extends Plugin {
 
     private async persistMineruConfig(config: MineruConfig) {
         const nextConfig = {
-            baseUrl: config.baseUrl,
-            apiPath: config.apiPath,
-            apiKey: config.apiKey,
+            apiKey: this.normalizeMineruToken(config.apiKey),
             language: config.language,
             enableFormula: config.enableFormula,
             enableTable: config.enableTable,

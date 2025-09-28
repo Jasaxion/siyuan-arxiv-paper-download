@@ -29,7 +29,7 @@
 2. 选择 **插入 arXiv 论文**。
 3. 输入或粘贴 arXiv 链接 / 编号，视需求勾选“解析全文”（以及“去掉参考文献”）。解析全文时可在“使用 LLM 渲染”与“使用 MinerU 处理 PDF”之间二选一：
    - 选择“使用 LLM 渲染”时，请填写 Base URL、API 路径、模型与 API Key（例如 DeepSeek），必要时开启“全文发送给 LLM”。
-   - 选择“使用 MinerU 处理 PDF”时，请填写 MinerU 基础地址、API 路径与 API Token，并可按需启用 OCR、公式/表格识别、语言及模型版本。
+   - 选择“使用 MinerU 处理 PDF”时，请填写 MinerU 的 API Token，并可按需启用 OCR、公式/表格识别、语言及模型版本。
 4. 若解析成功会直接插入 Markdown 内容；否则下载 PDF 并插入对应链接。
 
 ### LLM 辅助渲染
@@ -45,10 +45,8 @@
 
 ### MinerU PDF 处理
 
-当勾选“使用 MinerU 处理 PDF”时，插件会直接把 arXiv PDF 链接提交给 MinerU，轮询任务直至完成，并下载生成的 Markdown 压缩包插入笔记。配置项包括：
+当勾选“使用 MinerU 处理 PDF”时，插件会将 arXiv PDF 链接提交到 `https://mineru.net/api/v4/extract/task`，轮询任务直至完成，并下载生成的 Markdown 压缩包插入笔记。配置项包括：
 
-- **MinerU 基础地址**：通常为 `https://mineru.net`。
-- **MinerU API 路径**：默认 `/api/v4/extract/task`。
 - **MinerU API Token**：在 MinerU 后台申请的 `Bearer` Token。
 - 可选项：**启用 OCR**、**识别公式**、**识别表格**、**解析语言** 与 **模型版本**。
 

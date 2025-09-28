@@ -30,7 +30,7 @@ Having issues? --> https://github.com/Jasaxion/siyuan-arxiv-paper-download/issue
 2. Select **Insert arXiv paper**.
 3. Paste an arXiv link or identifier in the dialog, optionally enable **Parse full text** (and **Omit references** if desired). When parsing, you can choose between **Use LLM rendering** and **Use MinerU to process PDF**:
    - **Use LLM rendering**: supply the base URL, API path, model, and API key (for example DeepSeek) and optionally enable **Send full document to LLM**.
-   - **Use MinerU to process PDF**: provide the MinerU base URL, API path, and API token, then customize OCR, formula/table recognition, language, and model version.
+   - **Use MinerU to process PDF**: provide your MinerU API token, then customize OCR, formula/table recognition, language, and model version.
 4. Either the parsed Markdown content is inserted directly, or the PDF is saved under `assets/` and a link like `[paper-title.pdf](assets/paper-title.pdf)` is added.
 
 ### LLM-assisted rendering
@@ -46,10 +46,8 @@ The plugin sends Markdown to the model with a strict prompt that forbids halluci
 
 ### MinerU PDF processing
 
-When **Use MinerU to process PDF** is enabled, the plugin submits the arXiv PDF URL directly to the MinerU API, polls the task until completion, and downloads the generated Markdown bundle. Configure the service by filling in:
+When **Use MinerU to process PDF** is enabled, the plugin submits the arXiv PDF URL directly to the MinerU API at `https://mineru.net/api/v4/extract/task`, polls the task until completion, and downloads the generated Markdown bundle. Configure the service by supplying:
 
-- **MinerU base URL**: typically `https://mineru.net`.
-- **MinerU API path**: defaults to `/api/v4/extract/task`.
 - **MinerU API token**: the `Bearer` token from your MinerU account.
 - Optional tweaks for **Enable OCR**, **Enable formula recognition**, **Enable table recognition**, **Language code**, and **Model version**.
 

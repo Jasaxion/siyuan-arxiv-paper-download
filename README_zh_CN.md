@@ -8,10 +8,15 @@
 
 若遇到问题请前往：https://github.com/Jasaxion/siyuan-arxiv-paper-download/issues
 
+## 更新日志
+
+- 2025-09-28: 修复 Docker 下 SiYuan 笔记在下载文件时导致的 CROS 跨域访问错误
+- 2025-09-27: 实现从 Arxiv 下载文档并插入到 SiYuan笔记中
+
 ## 功能
 
 - 在输入 `/` 时新增 **插入 arXiv 论文** 菜单项。
-- 支持 `https://arxiv.org/abs/...`、`https://arxiv.org/pdf/...` 以及 `2509.17567` 等编号格式。
+- 支持 `https://arxiv.org/abs/...`、`https://arxiv.org/pdf/...` 以及 `2508.05592` 等编号格式。
 - 自动获取论文标题，下载 PDF 到 `assets/` 目录，并以标题命名。
 - 如果 `assets/` 中已存在同名 PDF，则直接复用，避免重复下载。
 - 在文档中插入 `[论文标题.pdf](assets/论文标题.pdf)` 格式的链接。

@@ -17,5 +17,8 @@
   "errorNotFound": "未找到对应的 arXiv 论文。",
   "errorMissingTitle": "无法获取论文标题。",
   "errorDownloadPdf": "下载 PDF 文件失败。",
-  "errorUploadPdf": "上传 PDF 到思源失败。"
+  "errorUploadPdf": "上传 PDF 到思源失败。",
+  "errorProxyRequest": "无法访问代理端点。",
+  "errorProxyStatus": "代理返回 HTTP ${status}。",
+  "errorProxyEncoding": "暂不支持代理响应编码 ${encoding}。"
 }

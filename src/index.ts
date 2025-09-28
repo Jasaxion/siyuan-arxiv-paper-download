@@ -22,6 +22,17 @@ interface ReadDirResponse {
     }>;
 }
 
+interface ForwardProxyResponse {
+    code: number;
+    msg: string;
+    data?: {
+        body: string;
+        bodyEncoding?: string;
+        contentType?: string;
+        status: number;
+    };
+}
+
 export default class ArxivPaperPlugin extends Plugin {
     private isMobile = false;
 
@@ -221,6 +232,14 @@ export default class ArxivPaperPlugin extends Plugin {
     }
 
     private async downloadPdf(url: string): Promise<Blob> {
+        const frontend = getFrontend();
+        if (frontend === "browser" || frontend === "browser-desktop" || frontend === "browser-mobile") {
+            return this.downloadPdfViaProxy(url);
+        }
+        return this.downloadPdfDirect(url);
+    }
+
+    private async downloadPdfDirect(url: string): Promise<Blob> {
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(this.i18n.errorDownloadPdf);
@@ -230,6 +249,67 @@ export default class ArxivPaperPlugin extends Plugin {
             throw new Error(this.i18n.errorDownloadPdf);
         }
         return blob;
+    }
+
+    private async downloadPdfViaProxy(url: string): Promise<Blob> {
+        const response = await fetch("/api/network/forwardProxy", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                url,
+                method: "GET",
+                responseEncoding: "base64",
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(this.i18n.errorProxyRequest);
+        }
+
+        const result = (await response.json()) as ForwardProxyResponse;
+        if (result.code !== 0 || !result.data) {
+            throw new Error(result.msg || this.i18n.errorProxyRequest);
+        }
+
+        const {body, bodyEncoding, contentType, status} = result.data;
+        if (!body) {
+            throw new Error(this.i18n.errorProxyRequest);
+        }
+
+        if (status < 200 || status >= 300) {
+            let errorDetail = "";
+            if (bodyEncoding?.startsWith("base64")) {
+                try {
+                    const decoded = this.decodeBase64(body);
+                    errorDetail = new TextDecoder().decode(decoded).trim();
+                } catch (err) {
+                    console.warn("Failed to decode proxy error body", err);
+                }
+            }
+            const statusMessage = this.i18n.errorProxyStatus.replace("${status}", String(status));
+            throw new Error(errorDetail ? `${statusMessage} ${errorDetail}` : statusMessage);
+        }
+
+        if (!bodyEncoding?.startsWith("base64")) {
+            throw new Error(this.i18n.errorProxyEncoding.replace("${encoding}", bodyEncoding ?? "unknown"));
+        }
+
+        const bytes = this.decodeBase64(body);
+        if (!bytes.byteLength) {
+            throw new Error(this.i18n.errorDownloadPdf);
+        }
+
+        return new Blob([bytes], {type: contentType || "application/pdf"});
+    }
+
+    private decodeBase64(data: string): Uint8Array {
+        const binary = atob(data);
+        const length = binary.length;
+        const bytes = new Uint8Array(length);
+        for (let i = 0; i < length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
     }
 
     private buildPdfFileName(title: string, fallbackId: string): string {

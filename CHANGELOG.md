@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.0 2025-09-29
+
+* 新增“使用 MinerU 处理 PDF”选项，可在解析全文时直接调用 MinerU API 获取 Markdown 结果。
+* MinerU 配置项会记住基础地址、API 路径、Token、语言及识别开关，并与 LLM 渲染互斥，避免重复输入。
+* Added a MinerU PDF processing pipeline that posts arXiv PDFs to MinerU, polls for completion, and inserts the returned Markdown.
+* Persisted MinerU credentials and exposed OCR/formula/table toggles while surfacing progress, download, and timeout errors clearly.
+
 ## v0.3.0 2025-09-28
 
 * 新增“使用 LLM 渲染”选项，可配置 Chat Completions 接口逐段修复 Markdown 排版。

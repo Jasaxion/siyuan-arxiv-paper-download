@@ -2,7 +2,7 @@ import {Dialog, Plugin, Protyle, showMessage, getFrontend} from "siyuan";
 import type {Lute} from "siyuan";
 import TurndownService from "turndown";
 import {gfm as turndownPluginGfm} from "turndown-plugin-gfm";
-import {gunzipSync} from "fflate";
+import {gunzipSync, unzipSync} from "fflate";
 import untar from "js-untar";
 import "./index.scss";
 
@@ -57,12 +57,34 @@ interface LlmContextOptions {
     prefix?: string;
 }
 
+interface MineruConfig {
+    enabled: boolean;
+    baseUrl: string;
+    apiPath: string;
+    apiKey: string;
+    language: string;
+    enableFormula: boolean;
+    enableTable: boolean;
+    isOcr: boolean;
+    modelVersion: string;
+}
+
 interface PluginSettings {
     llmConfig: {
         baseUrl: string;
         apiPath: string;
         model: string;
         apiKey: string;
+    };
+    mineruConfig: {
+        baseUrl: string;
+        apiPath: string;
+        apiKey: string;
+        language: string;
+        enableFormula: boolean;
+        enableTable: boolean;
+        isOcr: boolean;
+        modelVersion: string;
     };
 }
 
@@ -84,12 +106,41 @@ interface ForwardProxyResponse {
     };
 }
 
+interface MineruTaskCreateResponse {
+    code: number;
+    msg?: string;
+    data?: {
+        task_id?: string;
+    };
+}
+
+interface MineruTaskStatusResponse {
+    code: number;
+    msg?: string;
+    data?: {
+        task_id?: string;
+        state?: string;
+        err_msg?: string;
+        full_zip_url?: string;
+        extract_progress?: {
+            extracted_pages?: number;
+            total_pages?: number;
+            start_time?: string;
+        };
+    };
+}
+
 const DEFAULT_LLM_MODEL = "deepseek-chat";
 const DEFAULT_LLM_PATH = "/chat/completions";
 const LLM_TIMEOUT_MS = 240000;
 const LLM_FULL_INPUT_TIMEOUT_MS = 480000;
 const LLM_MAX_CONCURRENCY = 32;
 const LLM_SYSTEM_PROMPT = "You are an assistant that strictly reformats scientific content into clean Markdown. Preserve every heading level, image reference, table, formula and piece of text exactly as provided without adding, omitting, or altering meaning. Return only the corrected Markdown.";
+
+const DEFAULT_MINERU_BASE_URL = "https://mineru.net";
+const DEFAULT_MINERU_PATH = "/api/v4/extract/task";
+const MINERU_POLL_INTERVAL_MS = 4000;
+const MINERU_TIMEOUT_MS = 600000;
 
 export default class ArxivPaperPlugin extends Plugin {
     private isMobile = false;
@@ -104,6 +155,16 @@ export default class ArxivPaperPlugin extends Plugin {
             apiPath: DEFAULT_LLM_PATH,
             model: DEFAULT_LLM_MODEL,
             apiKey: "",
+        },
+        mineruConfig: {
+            baseUrl: DEFAULT_MINERU_BASE_URL,
+            apiPath: DEFAULT_MINERU_PATH,
+            apiKey: "",
+            language: "",
+            enableFormula: true,
+            enableTable: true,
+            isOcr: false,
+            modelVersion: "",
         },
     };
 
@@ -164,6 +225,36 @@ export default class ArxivPaperPlugin extends Plugin {
             </label>
         </div>
     </div>
+    <div class="siyuan-arxiv-dialog__group">
+        <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__mineru-toggle" disabled />${this.i18n.mineruToggleLabel}</label>
+        <div class="siyuan-arxiv-dialog__mineru-config">
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruBaseUrlLabel}</span>
+                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-base" value="${DEFAULT_MINERU_BASE_URL}" placeholder="${this.i18n.mineruBaseUrlPlaceholder}" disabled />
+            </label>
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruApiPathLabel}</span>
+                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-path" value="${DEFAULT_MINERU_PATH}" placeholder="${this.i18n.mineruApiPathPlaceholder}" disabled />
+            </label>
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruApiKeyLabel}</span>
+                <input type="password" class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-key" placeholder="${this.i18n.mineruApiKeyPlaceholder}" autocomplete="off" disabled />
+            </label>
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruLanguageLabel}</span>
+                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-language" placeholder="${this.i18n.mineruLanguagePlaceholder}" disabled />
+            </label>
+            <label class="siyuan-arxiv-dialog__field">
+                <span class="siyuan-arxiv-dialog__label">${this.i18n.mineruModelVersionLabel}</span>
+                <input class="b3-text-field fn__block siyuan-arxiv-dialog__input siyuan-arxiv-dialog__mineru-model" placeholder="${this.i18n.mineruModelVersionPlaceholder}" disabled />
+            </label>
+            <div class="siyuan-arxiv-dialog__mineru-options">
+                <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__mineru-ocr" disabled />${this.i18n.mineruOcrLabel}</label>
+                <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__mineru-formula" disabled />${this.i18n.mineruFormulaLabel}</label>
+                <label class="siyuan-arxiv-dialog__checkbox"><input type="checkbox" class="b3-switch siyuan-arxiv-dialog__mineru-table" disabled />${this.i18n.mineruTableLabel}</label>
+            </div>
+        </div>
+    </div>
     <div class="siyuan-arxiv-dialog__status" aria-live="polite"></div>
 </div>
 <div class="b3-dialog__action">
@@ -185,6 +276,15 @@ export default class ArxivPaperPlugin extends Plugin {
         const llmPathInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-path");
         const llmModelInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-model");
         const llmKeyInput = dialog.element.querySelector(".siyuan-arxiv-dialog__llm-key");
+        const mineruToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-toggle");
+        const mineruBaseInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-base");
+        const mineruPathInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-path");
+        const mineruKeyInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-key");
+        const mineruLanguageInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-language");
+        const mineruModelInput = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-model");
+        const mineruOcrToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-ocr");
+        const mineruFormulaToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-formula");
+        const mineruTableToggle = dialog.element.querySelector(".siyuan-arxiv-dialog__mineru-table");
 
         if (!(input instanceof HTMLInputElement)
             || !(cancelButton instanceof HTMLButtonElement)
@@ -197,7 +297,16 @@ export default class ArxivPaperPlugin extends Plugin {
             || !(llmBaseInput instanceof HTMLInputElement)
             || !(llmPathInput instanceof HTMLInputElement)
             || !(llmModelInput instanceof HTMLInputElement)
-            || !(llmKeyInput instanceof HTMLInputElement)) {
+            || !(llmKeyInput instanceof HTMLInputElement)
+            || !(mineruToggle instanceof HTMLInputElement)
+            || !(mineruBaseInput instanceof HTMLInputElement)
+            || !(mineruPathInput instanceof HTMLInputElement)
+            || !(mineruKeyInput instanceof HTMLInputElement)
+            || !(mineruLanguageInput instanceof HTMLInputElement)
+            || !(mineruModelInput instanceof HTMLInputElement)
+            || !(mineruOcrToggle instanceof HTMLInputElement)
+            || !(mineruFormulaToggle instanceof HTMLInputElement)
+            || !(mineruTableToggle instanceof HTMLInputElement)) {
             console.error("ArxivPaperPlugin: dialog template missing expected elements", {
                 input,
                 cancelButton,
@@ -211,18 +320,20 @@ export default class ArxivPaperPlugin extends Plugin {
                 llmPathInput,
                 llmModelInput,
                 llmKeyInput,
+                mineruToggle,
+                mineruBaseInput,
+                mineruPathInput,
+                mineruKeyInput,
+                mineruLanguageInput,
+                mineruModelInput,
+                mineruOcrToggle,
+                mineruFormulaToggle,
+                mineruTableToggle,
             });
             showMessage(this.i18n.errorDialogInit ?? "Failed to initialize dialog.");
             dialog.destroy();
             return;
         }
-
-        const syncReferenceToggle = () => {
-            omitReferencesCheckbox.disabled = !parseCheckbox.checked;
-            if (omitReferencesCheckbox.disabled) {
-                omitReferencesCheckbox.checked = false;
-            }
-        };
 
         const storedLlm = this.settings.llmConfig ?? {
             baseUrl: "",
@@ -234,13 +345,49 @@ export default class ArxivPaperPlugin extends Plugin {
         llmPathInput.value = storedLlm.apiPath || DEFAULT_LLM_PATH;
         llmModelInput.value = storedLlm.model || DEFAULT_LLM_MODEL;
         llmKeyInput.value = storedLlm.apiKey ?? "";
+        const storedMineru = this.settings.mineruConfig ?? {
+            baseUrl: DEFAULT_MINERU_BASE_URL,
+            apiPath: DEFAULT_MINERU_PATH,
+            apiKey: "",
+            language: "",
+            enableFormula: true,
+            enableTable: true,
+            isOcr: false,
+            modelVersion: "",
+        };
+        mineruBaseInput.value = storedMineru.baseUrl || DEFAULT_MINERU_BASE_URL;
+        mineruPathInput.value = storedMineru.apiPath || DEFAULT_MINERU_PATH;
+        mineruKeyInput.value = storedMineru.apiKey ?? "";
+        mineruLanguageInput.value = storedMineru.language ?? "";
+        mineruModelInput.value = storedMineru.modelVersion ?? "";
+        mineruOcrToggle.checked = Boolean(storedMineru.isOcr);
+        mineruFormulaToggle.checked = storedMineru.enableFormula !== false;
+        mineruTableToggle.checked = storedMineru.enableTable !== false;
 
-        const syncLlmAvailability = () => {
+        const syncDependentControls = () => {
             const parseEnabled = parseCheckbox.checked;
+            omitReferencesCheckbox.disabled = !parseEnabled;
+            if (!parseEnabled) {
+                omitReferencesCheckbox.checked = false;
+            }
+
             llmToggle.disabled = !parseEnabled;
+            mineruToggle.disabled = !parseEnabled;
+
             if (!parseEnabled) {
                 llmToggle.checked = false;
+                mineruToggle.checked = false;
             }
+
+            if (llmToggle.checked) {
+                mineruToggle.checked = false;
+            }
+
+            if (mineruToggle.checked) {
+                llmToggle.checked = false;
+                llmFullInputToggle.checked = false;
+            }
+
             const llmEnabled = parseEnabled && llmToggle.checked;
             llmFullInputToggle.disabled = !llmEnabled;
             if (!llmEnabled) {
@@ -249,13 +396,33 @@ export default class ArxivPaperPlugin extends Plugin {
             [llmBaseInput, llmPathInput, llmModelInput, llmKeyInput].forEach((field) => {
                 field.disabled = !llmEnabled;
             });
+
+            const mineruEnabled = parseEnabled && mineruToggle.checked;
+            [mineruBaseInput, mineruPathInput, mineruKeyInput, mineruLanguageInput, mineruModelInput].forEach((field) => {
+                field.disabled = !mineruEnabled;
+            });
+            [mineruOcrToggle, mineruFormulaToggle, mineruTableToggle].forEach((toggle) => {
+                toggle.disabled = !mineruEnabled;
+            });
         };
 
-        parseCheckbox.addEventListener("change", syncReferenceToggle);
-        parseCheckbox.addEventListener("change", syncLlmAvailability);
-        llmToggle.addEventListener("change", syncLlmAvailability);
-        syncReferenceToggle();
-        syncLlmAvailability();
+        parseCheckbox.addEventListener("change", () => {
+            syncDependentControls();
+        });
+        llmToggle.addEventListener("change", () => {
+            if (llmToggle.checked) {
+                mineruToggle.checked = false;
+            }
+            syncDependentControls();
+        });
+        mineruToggle.addEventListener("change", () => {
+            if (mineruToggle.checked) {
+                llmToggle.checked = false;
+                llmFullInputToggle.checked = false;
+            }
+            syncDependentControls();
+        });
+        syncDependentControls();
 
         cancelButton.addEventListener("click", () => {
             dialog.destroy();
@@ -276,19 +443,45 @@ export default class ArxivPaperPlugin extends Plugin {
                 fullInput: llmFullInputToggle.checked,
             };
 
+            const mineruConfig: MineruConfig = {
+                enabled: parseCheckbox.checked && mineruToggle.checked,
+                baseUrl: mineruBaseInput.value.trim() || DEFAULT_MINERU_BASE_URL,
+                apiPath: mineruPathInput.value.trim() || DEFAULT_MINERU_PATH,
+                apiKey: mineruKeyInput.value.trim(),
+                language: mineruLanguageInput.value.trim(),
+                enableFormula: mineruFormulaToggle.checked,
+                enableTable: mineruTableToggle.checked,
+                isOcr: mineruOcrToggle.checked,
+                modelVersion: mineruModelInput.value.trim(),
+            };
+
+            if (llmConfig.enabled && mineruConfig.enabled) {
+                statusElement.textContent = this.i18n.errorExclusiveEngines;
+                statusElement.classList.add("siyuan-arxiv-dialog__status--error");
+                return;
+            }
+
             if (llmConfig.enabled && (!llmConfig.baseUrl || !llmConfig.apiPath || !llmConfig.apiKey)) {
                 statusElement.textContent = this.i18n.errorLlmConfig;
                 statusElement.classList.add("siyuan-arxiv-dialog__status--error");
                 return;
             }
 
+            if (mineruConfig.enabled && (!mineruConfig.baseUrl || !mineruConfig.apiPath || !mineruConfig.apiKey)) {
+                statusElement.textContent = this.i18n.errorMineruConfig ?? "Invalid MinerU configuration.";
+                statusElement.classList.add("siyuan-arxiv-dialog__status--error");
+                return;
+            }
+
             await this.persistLlmConfig(llmConfig);
+            await this.persistMineruConfig(mineruConfig);
             await this.handleInsert(
                 protyle,
                 input.value.trim(),
                 parseCheckbox.checked,
                 omitReferencesCheckbox.checked,
                 llmConfig,
+                mineruConfig,
                 statusElement,
                 confirmButton,
                 dialog,
@@ -321,6 +514,7 @@ export default class ArxivPaperPlugin extends Plugin {
         parseFullText: boolean,
         omitReferences: boolean,
         llmConfig: LlmConfig,
+        mineruConfig: MineruConfig,
         statusElement: HTMLElement,
         confirmButton: HTMLButtonElement,
         dialog: Dialog,
@@ -344,6 +538,7 @@ export default class ArxivPaperPlugin extends Plugin {
                 const markdown = await this.generateFullTextMarkdown(metadata, statusElement, {
                     omitReferences,
                     llmConfig,
+                    mineruConfig,
                 });
                 protyle.focus();
                 this.insertMarkdown(protyle, markdown);
@@ -796,8 +991,14 @@ export default class ArxivPaperPlugin extends Plugin {
     private async generateFullTextMarkdown(
         metadata: ArxivMetadata,
         statusElement: HTMLElement,
-        options: {omitReferences: boolean; llmConfig: LlmConfig},
+        options: {omitReferences: boolean; llmConfig: LlmConfig; mineruConfig: MineruConfig},
     ): Promise<string> {
+        if (options.mineruConfig.enabled) {
+            statusElement.textContent = this.i18n.statusMineruSubmitting ?? "Submitting MinerU task...";
+            const mineruMarkdown = await this.fetchMineruMarkdown(metadata, statusElement, options.mineruConfig);
+            return this.applyLlmIfNeeded(mineruMarkdown, statusElement, options.llmConfig);
+        }
+
         statusElement.textContent = this.i18n.statusFetchingHtml;
         let htmlContent: string | null = null;
         try {
@@ -839,6 +1040,291 @@ export default class ArxivPaperPlugin extends Plugin {
         }
 
         throw new Error(this.i18n.errorParseFullTextFailed);
+    }
+
+    private async fetchMineruMarkdown(
+        metadata: ArxivMetadata,
+        statusElement: HTMLElement,
+        config: MineruConfig,
+    ): Promise<string> {
+        const endpoint = this.resolveMineruEndpoint(config, config.apiPath);
+        const payload: Record<string, unknown> = {
+            url: metadata.pdfUrl,
+            enable_formula: config.enableFormula,
+            enable_table: config.enableTable,
+        };
+        if (config.isOcr) {
+            payload.is_ocr = true;
+        }
+        if (config.language) {
+            payload.language = config.language;
+        }
+        if (config.modelVersion) {
+            payload.model_version = config.modelVersion;
+        }
+
+        let response: Response;
+        try {
+            response = await fetch(endpoint, {
+                method: "POST",
+                headers: this.buildMineruHeaders(config),
+                body: JSON.stringify(payload),
+            });
+        } catch (err) {
+            console.error("ArxivPaperPlugin: MinerU create task request failed", err);
+            throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
+        }
+
+        if (!response.ok) {
+            throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
+        }
+
+        let result: MineruTaskCreateResponse;
+        try {
+            result = (await response.json()) as MineruTaskCreateResponse;
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: MinerU create task response JSON parse failed", err);
+            throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
+        }
+
+        if (result.code !== 0 || !result.data?.task_id) {
+            const detail = result.msg?.trim();
+            throw new Error(detail || this.i18n.errorMineruRequest || "MinerU request failed.");
+        }
+
+        statusElement.textContent = this.i18n.statusMineruQueued ?? "MinerU task queued...";
+        const markdown = await this.pollMineruTask(result.data.task_id, config, statusElement);
+        if (!markdown.trim()) {
+            throw new Error(this.i18n.errorMineruNoMarkdown ?? "MinerU did not return Markdown output.");
+        }
+        return markdown.trim();
+    }
+
+    private async pollMineruTask(taskId: string, config: MineruConfig, statusElement: HTMLElement): Promise<string> {
+        const statusEndpoint = this.buildMineruStatusEndpoint(config, taskId);
+        const start = Date.now();
+        while (Date.now() - start < MINERU_TIMEOUT_MS) {
+            let response: Response;
+            try {
+                response = await fetch(statusEndpoint, {
+                    method: "GET",
+                    headers: this.buildMineruHeaders(config),
+                });
+            } catch (err) {
+                console.error("ArxivPaperPlugin: MinerU poll request failed", err);
+                throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
+            }
+
+            if (!response.ok) {
+                throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
+            }
+
+            let payload: MineruTaskStatusResponse;
+            try {
+                payload = (await response.json()) as MineruTaskStatusResponse;
+            } catch (err) {
+                console.warn("ArxivPaperPlugin: MinerU poll response JSON parse failed", err);
+                throw new Error(this.i18n.errorMineruRequest ?? "MinerU request failed.");
+            }
+
+            if (payload.code !== 0 || !payload.data) {
+                const detail = payload.msg?.trim();
+                throw new Error(detail || this.i18n.errorMineruRequest || "MinerU request failed.");
+            }
+
+            const state = payload.data.state?.toLowerCase();
+            if (state === "done") {
+                const zipUrl = payload.data.full_zip_url?.trim();
+                if (!zipUrl) {
+                    throw new Error(this.i18n.errorMineruResult ?? "MinerU returned no archive.");
+                }
+                statusElement.textContent = this.i18n.statusMineruDownloading ?? "Downloading MinerU result...";
+                return await this.downloadMineruArchive(zipUrl);
+            }
+
+            if (state === "failed") {
+                const detail = payload.data.err_msg?.trim();
+                throw new Error(detail || this.i18n.errorMineruResult || "MinerU task failed.");
+            }
+
+            this.updateMineruProgress(statusElement, payload.data);
+            await this.delay(MINERU_POLL_INTERVAL_MS);
+        }
+
+        throw new Error(this.i18n.errorMineruTimeout ?? "MinerU task timed out.");
+    }
+
+    private updateMineruProgress(statusElement: HTMLElement, data: NonNullable<MineruTaskStatusResponse["data"]>) {
+        const state = data.state?.toLowerCase() ?? "";
+        const progress = data.extract_progress;
+        if (state === "running" && progress && typeof progress.extracted_pages === "number" && typeof progress.total_pages === "number" && progress.total_pages > 0) {
+            const messageTemplate = this.i18n.statusMineruProgress ?? "MinerU processing ${done}/${total} pages...";
+            statusElement.textContent = messageTemplate
+                .replace("${done}", String(progress.extracted_pages))
+                .replace("${total}", String(progress.total_pages));
+            return;
+        }
+
+        switch (state) {
+        case "pending":
+            statusElement.textContent = this.i18n.statusMineruPending ?? "MinerU task pending...";
+            return;
+        case "converting":
+            statusElement.textContent = this.i18n.statusMineruConverting ?? "MinerU converting output...";
+            return;
+        case "waiting-file":
+        case "waiting_file":
+            statusElement.textContent = this.i18n.statusMineruWaitingFile ?? "MinerU waiting for file upload...";
+            return;
+        default:
+            statusElement.textContent = this.i18n.statusMineruRunning ?? "MinerU is processing...";
+        }
+    }
+
+    private async downloadMineruArchive(url: string): Promise<string> {
+        let response: Response;
+        try {
+            response = await fetch(url, {
+                method: "GET",
+                headers: {Accept: "application/zip, application/octet-stream"},
+            });
+        } catch (err) {
+            console.error("ArxivPaperPlugin: MinerU archive download failed", err);
+            throw new Error(this.i18n.errorMineruResult ?? "Failed to download MinerU archive.");
+        }
+
+        if (!response.ok) {
+            throw new Error(this.i18n.errorMineruResult ?? "Failed to download MinerU archive.");
+        }
+
+        const buffer = await response.arrayBuffer();
+        if (!buffer.byteLength) {
+            throw new Error(this.i18n.errorMineruResult ?? "Failed to download MinerU archive.");
+        }
+
+        const markdown = this.extractMarkdownFromMineruArchive(new Uint8Array(buffer));
+        if (!markdown) {
+            throw new Error(this.i18n.errorMineruNoMarkdown ?? "MinerU did not return Markdown output.");
+        }
+        return markdown.trim();
+    }
+
+    private extractMarkdownFromMineruArchive(data: Uint8Array): string | null {
+        let files: Record<string, Uint8Array>;
+        try {
+            files = unzipSync(data);
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: failed to unzip MinerU archive", err);
+            return null;
+        }
+
+        const decoder = new TextDecoder("utf-8", {fatal: false});
+        for (const [name, content] of Object.entries(files)) {
+            if (name.toLowerCase().endsWith(".md")) {
+                try {
+                    const text = decoder.decode(content).trim();
+                    if (text) {
+                        return text;
+                    }
+                } catch (err) {
+                    console.warn("ArxivPaperPlugin: failed to decode MinerU markdown file", name, err);
+                }
+            }
+        }
+
+        for (const [name, content] of Object.entries(files)) {
+            if (!name.toLowerCase().endsWith(".json")) {
+                continue;
+            }
+            try {
+                const text = decoder.decode(content);
+                const parsed = text ? JSON.parse(text) : undefined;
+                const candidate = this.extractMarkdownFromMineruJson(parsed);
+                if (candidate) {
+                    return candidate.trim();
+                }
+            } catch (err) {
+                console.warn("ArxivPaperPlugin: failed to decode MinerU JSON file", name, err);
+            }
+        }
+
+        return null;
+    }
+
+    private extractMarkdownFromMineruJson(data: unknown): string | null {
+        if (!data) {
+            return null;
+        }
+        const stack: unknown[] = [data];
+        const preferredKeys = new Set(["markdown", "md", "content", "text"]);
+        while (stack.length) {
+            const current = stack.pop();
+            if (typeof current === "string") {
+                const trimmed = current.trim();
+                if (trimmed) {
+                    return trimmed;
+                }
+                continue;
+            }
+            if (Array.isArray(current)) {
+                for (const item of current) {
+                    stack.push(item);
+                }
+                continue;
+            }
+            if (current && typeof current === "object") {
+                const record = current as Record<string, unknown>;
+                for (const key of preferredKeys) {
+                    const value = record[key as string];
+                    if (typeof value === "string" && value.trim()) {
+                        return value.trim();
+                    }
+                }
+                for (const value of Object.values(record)) {
+                    if (value && (typeof value === "object" || typeof value === "string")) {
+                        stack.push(value);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private buildMineruHeaders(config: MineruConfig): Record<string, string> {
+        const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+        };
+        if (config.apiKey) {
+            headers.Authorization = `Bearer ${config.apiKey}`;
+        }
+        return headers;
+    }
+
+    private resolveMineruEndpoint(config: MineruConfig, path?: string): string {
+        const requestedPath = (path ?? config.apiPath ?? "").trim() || DEFAULT_MINERU_PATH;
+        if (/^https?:\/\//i.test(requestedPath)) {
+            return requestedPath;
+        }
+        const base = (config.baseUrl || DEFAULT_MINERU_BASE_URL).trim();
+        const normalizedBase = base.replace(/\/+$/, "");
+        const normalizedPath = requestedPath.startsWith("/") ? requestedPath : `/${requestedPath}`;
+        return `${normalizedBase}${normalizedPath}`;
+    }
+
+    private buildMineruStatusEndpoint(config: MineruConfig, taskId: string): string {
+        const basePath = (config.apiPath ?? "").trim() || DEFAULT_MINERU_PATH;
+        if (/^https?:\/\//i.test(basePath)) {
+            return `${basePath.replace(/\/+$/, "")}/${encodeURIComponent(taskId)}`;
+        }
+        const normalizedPath = `${basePath.replace(/\/+$/, "")}/${encodeURIComponent(taskId)}`;
+        return this.resolveMineruEndpoint(config, normalizedPath);
+    }
+
+    private async delay(ms: number): Promise<void> {
+        await new Promise((resolve) => {
+            setTimeout(resolve, ms);
+        });
     }
 
     private async fetchArxivHtml(versionedId: string): Promise<string | null> {
@@ -1084,12 +1570,23 @@ export default class ArxivPaperPlugin extends Plugin {
             const stored = await this.loadData("settings");
             if (stored && typeof stored === "object") {
                 const llmConfig = (stored as Partial<PluginSettings>).llmConfig;
+                const mineruConfig = (stored as Partial<PluginSettings>).mineruConfig;
                 this.settings = {
                     llmConfig: {
                         baseUrl: llmConfig?.baseUrl ?? "",
                         apiPath: llmConfig?.apiPath || DEFAULT_LLM_PATH,
                         model: llmConfig?.model || DEFAULT_LLM_MODEL,
                         apiKey: llmConfig?.apiKey ?? "",
+                    },
+                    mineruConfig: {
+                        baseUrl: mineruConfig?.baseUrl ?? DEFAULT_MINERU_BASE_URL,
+                        apiPath: mineruConfig?.apiPath || DEFAULT_MINERU_PATH,
+                        apiKey: mineruConfig?.apiKey ?? "",
+                        language: mineruConfig?.language ?? "",
+                        enableFormula: mineruConfig?.enableFormula !== false,
+                        enableTable: mineruConfig?.enableTable !== false,
+                        isOcr: Boolean(mineruConfig?.isOcr),
+                        modelVersion: mineruConfig?.modelVersion ?? "",
                     },
                 };
                 return;
@@ -1103,6 +1600,16 @@ export default class ArxivPaperPlugin extends Plugin {
                 apiPath: DEFAULT_LLM_PATH,
                 model: DEFAULT_LLM_MODEL,
                 apiKey: "",
+            },
+            mineruConfig: {
+                baseUrl: DEFAULT_MINERU_BASE_URL,
+                apiPath: DEFAULT_MINERU_PATH,
+                apiKey: "",
+                language: "",
+                enableFormula: true,
+                enableTable: true,
+                isOcr: false,
+                modelVersion: "",
             },
         };
     }
@@ -1123,6 +1630,31 @@ export default class ArxivPaperPlugin extends Plugin {
             await this.saveData("settings", this.settings);
         } catch (err) {
             console.warn("ArxivPaperPlugin: failed to save settings", err);
+        }
+    }
+
+    private async persistMineruConfig(config: MineruConfig) {
+        const nextConfig = {
+            baseUrl: config.baseUrl,
+            apiPath: config.apiPath,
+            apiKey: config.apiKey,
+            language: config.language,
+            enableFormula: config.enableFormula,
+            enableTable: config.enableTable,
+            isOcr: config.isOcr,
+            modelVersion: config.modelVersion,
+        };
+        const hasChanges = Object.entries(nextConfig).some(
+            ([key, value]) => this.settings.mineruConfig[key as keyof PluginSettings["mineruConfig"]] !== value,
+        );
+        if (!hasChanges) {
+            return;
+        }
+        this.settings.mineruConfig = nextConfig;
+        try {
+            await this.saveData("settings", this.settings);
+        } catch (err) {
+            console.warn("ArxivPaperPlugin: failed to save MinerU settings", err);
         }
     }
 

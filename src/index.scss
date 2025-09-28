@@ -47,6 +47,19 @@
     padding-left: 34px;
   }
 
+  &__mineru-config {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 34px;
+  }
+
+  &__mineru-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
   &__field {
     display: flex;
     flex-direction: column;
